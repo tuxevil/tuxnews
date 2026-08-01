@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "tuxnews",
+  "project_id": "38d2a1c1-2a9a-455f-84aa-a08b111ada96"
+}
