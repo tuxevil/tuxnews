@@ -1,0 +1,73 @@
+{
+  "generated_at": "2026-08-02T13:52:52.503666+00:00",
+  "base_url": "http://127.0.0.1:18000",
+  "users": 8,
+  "duration_s": 10.0,
+  "targets": [
+    {
+      "target": "feed",
+      "users": 8,
+      "duration_s": 10.0,
+      "count": 1812,
+      "throughput_per_minute": 10872.0,
+      "p50_ms": 41.89,
+      "p95_ms": 50.59,
+      "p99_ms": 107.67,
+      "max_ms": 320.05,
+      "errors": 0,
+      "error_rate": 0.0
+    },
+    {
+      "target": "clusters",
+      "users": 8,
+      "duration_s": 10.0,
+      "count": 2707,
+      "throughput_per_minute": 16242.0,
+      "p50_ms": 27.88,
+      "p95_ms": 35.46,
+      "p99_ms": 72.59,
+      "max_ms": 201.45,
+      "errors": 0,
+      "error_rate": 0.0
+    },
+    {
+      "target": "sources",
+      "users": 8,
+      "duration_s": 10.0,
+      "count": 2612,
+      "throughput_per_minute": 15672.0,
+      "p50_ms": 28.15,
+      "p95_ms": 36.1,
+      "p99_ms": 94.36,
+      "max_ms": 361.93,
+      "errors": 0,
+      "error_rate": 0.0
+    },
+    {
+      "target": "briefings",
+      "users": 8,
+      "duration_s": 10.0,
+      "count": 2584,
+      "throughput_per_minute": 15504.0,
+      "p50_ms": 29.29,
+      "p95_ms": 36.75,
+      "p99_ms": 81.83,
+      "max_ms": 191.84,
+      "errors": 0,
+      "error_rate": 0.0
+    },
+    {
+      "target": "feedback",
+      "users": 8,
+      "duration_s": 10.0,
+      "count": 2507,
+      "throughput_per_minute": 15042.0,
+      "p50_ms": 29.17,
+      "p95_ms": 40.01,
+      "p99_ms": 117.33,
+      "max_ms": 184.54,
+      "errors": 0,
+      "error_rate": 0.0
+    }
+  ]
+}

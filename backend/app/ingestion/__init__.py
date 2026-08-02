@@ -1,0 +1,1 @@
+"""Untrusted external-content adapters."""

@@ -1,0 +1,9 @@
+sources:
+  - name: Python Blog
+    url: https://blog.python.org/feeds/posts/default
+    source_type: atom
+    tags: [python, programming]
+  - name: Python Insider
+    url: https://feeds.feedburner.com/PythonInsider
+    source_type: atom
+    tags: [python, news]
