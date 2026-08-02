@@ -10,8 +10,10 @@ import {
   HealthStatus,
   PreferenceProfile,
   SourceRecord,
+  SourcePreference,
   StoryCluster,
   TokenResponse,
+  TopicPreference,
   UsageReport,
   User,
   UserSettings,
@@ -221,6 +223,9 @@ function Dashboard({
   const deferredTag = useDeferredValue(tag.trim().toLowerCase());
   const [items, setItems] = useState<FeedItem[]>([]);
   const [feedbackByArticle, setFeedbackByArticle] = useState<Record<number, FeedbackEvent>>({});
+  const [feedbackByQuality, setFeedbackByQuality] = useState<Record<number, FeedbackEvent>>({});
+  const [feedbackBySource, setFeedbackBySource] = useState<Record<number, FeedbackEvent>>({});
+  const [feedbackByTopic, setFeedbackByTopic] = useState<Record<string, FeedbackEvent>>({});
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -251,6 +256,9 @@ function Dashboard({
       if (!active) return;
       setItems(response.items);
       setFeedbackByArticle({});
+      setFeedbackByQuality({});
+      setFeedbackBySource({});
+      setFeedbackByTopic({});
       setNextCursor(response.next_cursor);
     }).catch((requestError) => {
       if (active) setError(friendlyError(requestError));
@@ -283,13 +291,22 @@ function Dashboard({
   useEffect(() => {
     if (!items.length) return;
     let active = true;
-    void getCurrentFeedback(session.accessToken, items.map((item) => item.id)).then((events) => {
+    void getCurrentFeedback(session.accessToken, []).then((events) => {
       if (!active) return;
-      const current: Record<number, FeedbackEvent> = {};
-      events.filter((event) => event.action_type === "article" && event.article_id !== null).forEach((event) => {
-        current[event.article_id as number] = event;
+      const article: Record<number, FeedbackEvent> = {};
+      const quality: Record<number, FeedbackEvent> = {};
+      const source: Record<number, FeedbackEvent> = {};
+      const topic: Record<string, FeedbackEvent> = {};
+      events.forEach((event) => {
+        if (event.action_type === "article" && event.article_id !== null) article[event.article_id] = event;
+        else if (event.action_type === "quality" && event.article_id !== null) quality[event.article_id] = event;
+        else if (event.action_type === "source" && event.source_id !== null) source[event.source_id] = event;
+        else if (event.action_type === "topic" && event.topic_name !== null) topic[event.topic_name] = event;
       });
-      setFeedbackByArticle(current);
+      setFeedbackByArticle(article);
+      setFeedbackByQuality(quality);
+      setFeedbackBySource(source);
+      setFeedbackByTopic(topic);
     }).catch(() => {
       // Feedback controls still work when a profile read is temporarily unavailable.
     });
@@ -361,12 +378,46 @@ function Dashboard({
     window.setTimeout(() => setNotice(null), 3600);
   };
 
+  const setFeedbackFor = (
+    actionType: FeedbackEvent["action_type"],
+    key: number | string,
+    event: FeedbackEvent | undefined,
+  ) => {
+    if (actionType === "article") {
+      setFeedbackByArticle((current) => { const next = { ...current }; if (event) next[key as number] = event; else delete next[key as number]; return next; });
+    } else if (actionType === "quality") {
+      setFeedbackByQuality((current) => { const next = { ...current }; if (event) next[key as number] = event; else delete next[key as number]; return next; });
+    } else if (actionType === "source") {
+      setFeedbackBySource((current) => { const next = { ...current }; if (event) next[key as number] = event; else delete next[key as number]; return next; });
+    } else {
+      setFeedbackByTopic((current) => { const next = { ...current }; if (event) next[key as string] = event; else delete next[key as string]; return next; });
+    }
+  };
+
+  const reorderAfterArticleFeedback = (itemId: number, delta: number) => {
+    setItems((current) => {
+      const next = current.map((entry) => entry.id === itemId
+        ? { ...entry, relevance_score: Math.max(0, Math.min(1, (entry.relevance_score ?? 0) + delta)) }
+        : entry);
+      return [...next].sort(
+        (a, b) => (b.relevance_score ?? 0) - (a.relevance_score ?? 0)
+          || Date.parse(b.published_at ?? "") - Date.parse(a.published_at ?? "")
+          || b.id - a.id,
+      );
+    });
+  };
+
   const handleFeedback = async (
     item: FeedItem,
     actionType: FeedbackEvent["action_type"],
     rating: Exclude<FeedbackEvent["rating"], "neutral">,
   ) => {
-    const previous = actionType === "article" ? feedbackByArticle[item.id] : undefined;
+    const topicKey = item.tags[0] ?? null;
+    const previous = actionType === "article" ? feedbackByArticle[item.id]
+      : actionType === "quality" ? feedbackByQuality[item.id]
+      : actionType === "source" ? feedbackBySource[item.source_id]
+      : topicKey !== null ? feedbackByTopic[topicKey] : undefined;
+    const feedbackKey = actionType === "source" ? item.source_id : actionType === "topic" ? topicKey : item.id;
     const undoing = previous?.action_type === actionType && previous.rating === rating && previous.id > 0;
     const optimistic: FeedbackEvent = {
       id: previous?.id ?? -Date.now(),
@@ -375,14 +426,12 @@ function Dashboard({
       rating,
       article_id: actionType === "source" || actionType === "topic" ? null : item.id,
       source_id: actionType === "source" ? item.source_id : null,
-      topic_name: actionType === "topic" ? item.tags[0] ?? null : null,
+      topic_name: actionType === "topic" ? topicKey : null,
       reason: null,
       supersedes_id: previous?.id ?? null,
       is_current: true,
     };
-    if (actionType === "article") {
-      setFeedbackByArticle((current) => ({ ...current, [item.id]: optimistic }));
-    }
+    if (feedbackKey !== null) setFeedbackFor(actionType, feedbackKey, optimistic);
     try {
       const result = undoing
         ? await undoFeedback(session.accessToken, previous.id)
@@ -391,27 +440,23 @@ function Dashboard({
             rating,
             article_id: actionType === "article" || actionType === "quality" ? item.id : undefined,
             source_id: actionType === "source" ? item.source_id : undefined,
-            topic_name: actionType === "topic" ? item.tags[0] : undefined,
+            topic_name: actionType === "topic" ? topicKey ?? undefined : undefined,
           });
+      if (feedbackKey !== null) {
+        if (result.rating === "neutral") setFeedbackFor(actionType, feedbackKey, undefined);
+        else setFeedbackFor(actionType, feedbackKey, result);
+      }
       if (actionType === "article") {
-        setFeedbackByArticle((current) => {
-          if (result.rating === "neutral") {
-            const next = { ...current };
-            delete next[item.id];
-            return next;
-          }
-          return { ...current, [item.id]: result };
-        });
+        const delta = undoing
+          ? (previous.rating === "like" ? -0.15 : previous.rating === "dislike" ? 0.15 : 0)
+          : rating === "like" ? 0.15 : -0.15;
+        if (delta !== 0) reorderAfterArticleFeedback(item.id, delta);
       }
       announce(undoing ? "Feedback removed. Your ranking will adjust." : `${actionType} feedback saved.`);
     } catch (requestError) {
-      if (actionType === "article") {
-        setFeedbackByArticle((current) => {
-          const next = { ...current };
-          if (previous) next[item.id] = previous;
-          else delete next[item.id];
-          return next;
-        });
+      if (feedbackKey !== null) {
+        if (previous) setFeedbackFor(actionType, feedbackKey, previous);
+        else setFeedbackFor(actionType, feedbackKey, undefined);
       }
       announce(friendlyError(requestError));
     }
@@ -572,7 +617,7 @@ function Dashboard({
            {!loading && !error && feedMode === "flat" && items.length === 0 && <EmptyFeed hasFilter={Boolean(deferredTag)} />}
            {!loading && !error && feedMode === "flat" && items.length > 0 && (
              <>
-               <div className="feed-grid">{items.map((item, index) => <ArticleCard item={item} index={index} feedback={feedbackByArticle[item.id]} clusters={clusters} onOpenCluster={openCluster} onFeedback={handleFeedback} key={item.id} />)}</div>
+               <div className="feed-grid">{items.map((item, index) => <ArticleCard item={item} index={index} feedback={feedbackByArticle[item.id]} qualityFeedback={feedbackByQuality[item.id]} sourceFeedback={feedbackBySource[item.source_id]} topicFeedback={feedbackByTopic[item.tags[0] ?? ""]} clusters={clusters} onOpenCluster={openCluster} onFeedback={handleFeedback} key={item.id} />)}</div>
                {nextCursor && <button className="load-more" onClick={() => void loadMore()} disabled={loadingMore}>{loadingMore ? "Loading more…" : "Load more stories"}</button>}
              </>
            )}
@@ -631,6 +676,9 @@ function ArticleCard({
   item,
   index,
   feedback,
+  qualityFeedback,
+  sourceFeedback,
+  topicFeedback,
   clusters,
   onOpenCluster,
   onFeedback,
@@ -638,6 +686,9 @@ function ArticleCard({
   item: FeedItem;
   index: number;
   feedback?: FeedbackEvent;
+  qualityFeedback?: FeedbackEvent;
+  sourceFeedback?: FeedbackEvent;
+  topicFeedback?: FeedbackEvent;
   clusters: StoryCluster[];
   onOpenCluster: (clusterId: number) => void;
   onFeedback: (item: FeedItem, actionType: FeedbackEvent["action_type"], rating: Exclude<FeedbackEvent["rating"], "neutral">) => Promise<void>;
@@ -686,10 +737,10 @@ function ArticleCard({
             >More</summary>
             <div className="advanced-popover">
               <span>Adjust one signal</span>
-              <button onClick={() => void onFeedback(item, "source", "like")}>Prefer source</button>
-              <button onClick={() => void onFeedback(item, "source", "dislike")}>Mute source signal</button>
-              <button onClick={() => void onFeedback(item, "topic", "like")} disabled={!item.tags[0]}>Prefer topic</button>
-              <button onClick={() => void onFeedback(item, "quality", "dislike")}>Lower quality</button>
+              <button className={sourceFeedback?.rating === "like" ? "active" : ""} onClick={() => void onFeedback(item, "source", "like")} aria-pressed={sourceFeedback?.rating === "like"}>{sourceFeedback?.rating === "like" ? "Undo prefer source" : "Prefer source"}</button>
+              <button className={sourceFeedback?.rating === "dislike" ? "active" : ""} onClick={() => void onFeedback(item, "source", "dislike")} aria-pressed={sourceFeedback?.rating === "dislike"}>{sourceFeedback?.rating === "dislike" ? "Undo mute source signal" : "Mute source signal"}</button>
+              <button className={topicFeedback?.rating === "like" ? "active" : ""} onClick={() => void onFeedback(item, "topic", "like")} disabled={!item.tags[0]} aria-pressed={topicFeedback?.rating === "like"}>{topicFeedback?.rating === "like" ? "Undo prefer topic" : "Prefer topic"}</button>
+              <button className={qualityFeedback?.rating === "dislike" ? "active" : ""} onClick={() => void onFeedback(item, "quality", "dislike")} aria-pressed={qualityFeedback?.rating === "dislike"}>{qualityFeedback?.rating === "dislike" ? "Undo lower quality" : "Lower quality"}</button>
             </div>
           </details>
           <a className="read-link" href={item.url} target="_blank" rel="noreferrer">Read <span aria-hidden="true">↗</span></a>
@@ -1055,7 +1106,75 @@ function ProfileView({
       <div className="profile-heading"><p className="eyebrow">LEARNED PROFILE / TRANSPARENT BY DESIGN</p><h1 id="profile-heading">Your signal.</h1><p className="lede">A quiet snapshot of what the desk has learned. Fine controls arrive with your first feedback.</p></div>
       {error && <p className="form-error" role="alert">{error}</p>}
        {!error && !profile && <FeedLoading />}
-       {profile && <div className="profile-grid"><div className="profile-panel"><span className="panel-label">TOPICS</span>{profile.topics.length === 0 ? <p className="muted">No topic preferences yet.</p> : profile.topics.map((topic) => <TopicControl key={topic.id} topic={topic} onUpdate={onTopicUpdate} onReset={onTopicReset} />)}</div><div className="profile-panel"><span className="panel-label">SOURCES</span>{profile.sources.length === 0 ? <p className="muted">No sources connected yet.</p> : profile.sources.map((source) => <SourceControl key={source.id} source={source} onMute={onSourceMute} onReset={onSourceReset} />)}</div><RankingControl ranking={profile.ranking} onUpdate={onRankingUpdate} />{settings && <SettingsControl settings={settings} onUpdate={onSettingsUpdate} />}{settingsError && <p className="form-error" role="alert">{settingsError}</p>}<div className="profile-panel profile-version"><span className="panel-label">PROFILE VERSION</span><strong>{profile.profile_version}</strong><p className="muted">Changes are versioned and auditable.</p></div></div>}
+       {profile && <><MindmapPanel topics={profile.topics} sources={profile.sources} onTopicUpdate={onTopicUpdate} onTopicReset={onTopicReset} /><div className="profile-grid"><div className="profile-panel"><span className="panel-label">TOPICS</span>{profile.topics.length === 0 ? <p className="muted">No topic preferences yet.</p> : profile.topics.map((topic) => <TopicControl key={topic.id} topic={topic} onUpdate={onTopicUpdate} onReset={onTopicReset} />)}</div><div className="profile-panel"><span className="panel-label">SOURCES</span>{profile.sources.length === 0 ? <p className="muted">No sources connected yet.</p> : profile.sources.map((source) => <SourceControl key={source.id} source={source} onMute={onSourceMute} onReset={onSourceReset} />)}</div><RankingControl ranking={profile.ranking} onUpdate={onRankingUpdate} />{settings && <SettingsControl settings={settings} onUpdate={onSettingsUpdate} />}{settingsError && <p className="form-error" role="alert">{settingsError}</p>}<div className="profile-panel profile-version"><span className="panel-label">PROFILE VERSION</span><strong>{profile.profile_version}</strong><p className="muted">Changes are versioned and auditable.</p></div></div></>}
+    </section>
+  );
+}
+
+function MindmapPanel({
+  topics,
+  sources,
+  onTopicUpdate,
+  onTopicReset,
+}: {
+  topics: TopicPreference[];
+  sources: SourcePreference[];
+  onTopicUpdate: (topicName: string, weightScore: number) => Promise<void>;
+  onTopicReset: (topicName: string) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState<TopicPreference | null>(null);
+  const [draft, setDraft] = useState(0);
+  const openEditor = (topic: TopicPreference) => {
+    setEditing(topic);
+    setDraft(topic.weight_score);
+  };
+  const nodes = topics.slice(0, 14);
+  const center = 170;
+  const ring = 128;
+  const positions = nodes.map((topic, index) => {
+    const angle = (index / Math.max(nodes.length, 1)) * 2 * Math.PI - Math.PI / 2;
+    const magnitude = Math.max(-1, Math.min(1, topic.weight_score));
+    const size = 40 + Math.abs(magnitude) * 66;
+    return {
+      topic,
+      x: center + ring * Math.cos(angle),
+      y: center + ring * Math.sin(angle),
+      size,
+      negative: magnitude < 0,
+    };
+  });
+  const visibleSources = sources.filter((source) => !source.is_muted);
+  const mutedSources = sources.filter((source) => source.is_muted);
+  return (
+    <section className="mindmap-panel" aria-labelledby="mindmap-heading">
+      <div className="mindmap-heading"><span className="panel-label">MINDMAP / LEARNED TOPICS</span><h2 id="mindmap-heading">What the desk hears.</h2>{editing && <div className="mindmap-edit"><strong>{editing.topic_name}</strong><label>Weight<input type="range" min={-1} max={1} step={0.05} value={draft} onChange={(event) => setDraft(Number(event.target.value))} /></label><span className="muted">{draft.toFixed(2)}</span><button className="text-button" onClick={() => void onTopicUpdate(editing.topic_name, draft).then(() => setEditing(null))}>Apply weight</button><button className="text-button danger" onClick={() => void onTopicReset(editing.topic_name).then(() => setEditing(null))}>Forget topic</button></div>}</div>
+      {nodes.length === 0
+        ? <p className="muted">Your signal map is empty. Rate stories to grow it.</p>
+        : <svg className="mindmap-svg" viewBox="0 0 340 340" role="img" aria-label="Topic mindmap">
+            {positions.map(({ topic, x, y, size, negative }) => (
+              <g key={topic.id}>
+                <line x1={center} y1={center} x2={x} y2={y} className={negative ? "mindmap-edge negative" : "mindmap-edge"} strokeWidth={0.5 + Math.abs(Math.max(-1, Math.min(1, topic.weight_score))) * 2.2} />
+                <g className="mindmap-node" transform={`translate(${x} ${y})`} onClick={() => openEditor(topic)} role="button" tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") openEditor(topic); }}>
+                  <circle r={size / 2} className={negative ? "negative" : ""} />
+                  <text textAnchor="middle" dominantBaseline="middle">{topic.topic_name.length > 16 ? `${topic.topic_name.slice(0, 15)}…` : topic.topic_name}</text>
+                </g>
+              </g>
+            ))}
+            <g className="mindmap-center">
+              <circle r={34} />
+              <text textAnchor="middle" dominantBaseline="middle">SIGNAL</text>
+            </g>
+          </svg>}
+      <div className="mindmap-source-rail" aria-label="Source reputation">
+        <span className="panel-label">SOURCE REPUTATION</span>
+        {visibleSources.slice(0, 10).map((source) => (
+          <div className="mindmap-source" key={source.id}><span>{source.name}</span><span className="source-track"><span style={{ width: `${Math.round(source.reputation_score * 100)}%` }} /></span></div>
+        ))}
+        {mutedSources.slice(0, 10).map((source) => (
+          <div className="mindmap-source muted" key={source.id}><span>{source.name}</span><span className="source-track"><span style={{ width: "0%" }} /></span></div>
+        ))}
+        {sources.length === 0 && <p className="muted">No sources yet.</p>}
+      </div>
     </section>
   );
 }

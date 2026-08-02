@@ -80,7 +80,9 @@ def calculate_score(
     raw_components: dict[str, float | None] = {
         "semantic_similarity": None if semantic_similarity is None else _clamp(semantic_similarity),
         "source_reputation": None if source_reputation is None else _clamp(source_reputation),
-        "feedback_penalty": None if feedback_penalty is None else _clamp(feedback_penalty),
+        "feedback_penalty": None
+        if feedback_penalty is None
+        else min(1.0, max(-1.0, feedback_penalty)),
     }
     raw_weights = {
         "semantic_similarity": weights.semantic,

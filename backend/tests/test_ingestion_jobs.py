@@ -65,7 +65,9 @@ class SuccessfulCurator:
     def __init__(self) -> None:
         self.calls: list[dict[str, str]] = []
 
-    async def curate(self, *, title: str, content: str, profile: str | None = None) -> CurationOutcome:
+    async def curate(
+        self, *, title: str, content: str, profile: str | None = None, use_llm: bool = True
+    ) -> CurationOutcome:
         self.calls.append({"title": title, "content": content, "profile": profile or ""})
         return CurationOutcome(
             result=CurationResult(

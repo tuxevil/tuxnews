@@ -1,9 +1,9 @@
 sources:
   - name: Python Blog
-    url: https://blog.python.org/feeds/posts/default
-    source_type: atom
+    url: https://blog.python.org/rss.xml
+    source_type: rss
     tags: [python, programming]
-  - name: Python Insider
-    url: https://feeds.feedburner.com/PythonInsider
+  - name: Python Software Foundation News
+    url: https://pyfound.blogspot.com/feeds/posts/default
     source_type: atom
-    tags: [python, news]
+    tags: [python, community]

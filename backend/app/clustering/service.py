@@ -1,18 +1,26 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.service import record_audit
-from app.clustering.domain import ClusterRules, ClusterStatus, cluster_status, evaluate_membership
+from app.clustering.domain import (
+    ClusterRules,
+    ClusterStatus,
+    cluster_status,
+    evaluate_membership,
+    should_merge_clusters,
+)
 from app.core.context import TenantContext
 from app.db.models import Article, Cluster, ClusterMember, Source
 from app.embeddings.qdrant_index import EmbeddingHit, EmbeddingIndex
+
+EmbedFunction = Callable[[str], Awaitable[Sequence[float]]]
 
 
 @dataclass(frozen=True)
@@ -293,6 +301,263 @@ async def assign_article(
     )
 
 
+async def _cluster_articles(
+    session: AsyncSession,
+    cluster: Cluster,
+    *,
+    tenant: TenantContext,
+) -> list[Article]:
+    return list(
+        await session.scalars(
+            select(Article)
+            .join(ClusterMember, ClusterMember.article_id == Article.id)
+            .where(
+                ClusterMember.cluster_id == cluster.id,
+                ClusterMember.user_id == tenant.tenant_id,
+                ClusterMember.is_current.is_(True),
+                Article.user_id == tenant.tenant_id,
+            )
+        )
+    )
+
+
+async def _safe_embed(embed: EmbedFunction | None, article: Article) -> Sequence[float] | None:
+    if embed is None:
+        return None
+    try:
+        return await embed(article.content_clean or article.summary or "")
+    except Exception:
+        return None
+
+
+async def _safe_search(
+    index: EmbeddingIndex | Any | None,
+    tenant: TenantContext,
+    vector: Sequence[float],
+) -> tuple[EmbeddingHit, ...]:
+    if index is None:
+        return ()
+    try:
+        return await index.search(user_id=tenant.tenant_id, vector=vector, limit=10)
+    except Exception:
+        return ()
+
+
+async def _cross_similarity(
+    session: AsyncSession,
+    left: Cluster,
+    right: Cluster,
+    *,
+    tenant: TenantContext,
+    index: EmbeddingIndex | Any | None,
+    embed: EmbedFunction | None,
+    sample_size: int = 3,
+) -> float | None:
+    left_articles = (await _cluster_articles(session, left, tenant=tenant))[:sample_size]
+    right_articles = (await _cluster_articles(session, right, tenant=tenant))[:sample_size]
+    left_ids = {article.id for article in left_articles}
+    right_ids = {article.id for article in right_articles}
+    if not left_ids or not right_ids:
+        return None
+    left_best = 0.0
+    right_best = 0.0
+    for article in left_articles:
+        vector = await _safe_embed(embed, article)
+        if vector is None:
+            continue
+        for hit in await _safe_search(index, tenant, vector):
+            if hit.article_id in right_ids:
+                left_best = max(left_best, hit.score)
+    for article in right_articles:
+        vector = await _safe_embed(embed, article)
+        if vector is None:
+            continue
+        for hit in await _safe_search(index, tenant, vector):
+            if hit.article_id in left_ids:
+                right_best = max(right_best, hit.score)
+    if left_best == 0.0 or right_best == 0.0:
+        return None
+    return min(left_best, right_best)
+
+
+async def _merge_clusters(
+    session: AsyncSession,
+    keep: Cluster,
+    absorb: Cluster,
+    *,
+    tenant: TenantContext,
+    rules: ClusterRules,
+    now: datetime,
+) -> int:
+    members = list(
+        await session.scalars(
+            select(ClusterMember).where(
+                ClusterMember.cluster_id == absorb.id,
+                ClusterMember.user_id == tenant.tenant_id,
+                ClusterMember.is_current.is_(True),
+            )
+        )
+    )
+    moved = 0
+    for member in members:
+        existing = await _current_member(
+            session,
+            tenant_id=tenant.tenant_id,
+            article_id=member.article_id,
+            algorithm_version=rules.algorithm_version,
+        )
+        member.is_current = False
+        article = await session.scalar(
+            select(Article).where(
+                Article.id == member.article_id,
+                Article.user_id == tenant.tenant_id,
+            )
+        )
+        if existing is not None and existing.cluster_id == keep.id:
+            existing.similarity_score = max(existing.similarity_score, member.similarity_score)
+            if article is not None:
+                article.cluster_id = keep.id
+            continue
+        session.add(
+            ClusterMember(
+                user_id=tenant.tenant_id,
+                cluster_id=keep.id,
+                article_id=member.article_id,
+                similarity_score=member.similarity_score,
+                membership_reason="merged_cluster",
+                algorithm_version=rules.algorithm_version,
+                is_current=True,
+            )
+        )
+        if article is not None:
+            article.cluster_id = keep.id
+        moved += 1
+    if absorb.window_start is not None and (
+        keep.window_start is None or _utc(absorb.window_start) < _utc(keep.window_start)
+    ):
+        keep.window_start = absorb.window_start
+    if absorb.window_end is not None and (
+        keep.window_end is None or _utc(absorb.window_end) > _utc(keep.window_end)
+    ):
+        keep.window_end = absorb.window_end
+    keep.status = ClusterStatus.ACTIVE.value
+    keep.reconciled_at = now
+    absorb.status = ClusterStatus.EMPTY.value
+    absorb.reconciled_at = now
+    return moved
+
+
+async def _merge_similar_clusters(
+    session: AsyncSession,
+    cluster: Cluster,
+    *,
+    tenant: TenantContext,
+    rules: ClusterRules,
+    index: EmbeddingIndex | Any | None,
+    embed: EmbedFunction | None,
+    now: datetime,
+    max_merges: int = 5,
+) -> int:
+    merged = 0
+    window = timedelta(hours=rules.window_hours)
+    for _ in range(max_merges):
+        candidates: list[tuple[float, Cluster]] = []
+        others = list(
+            await session.scalars(
+                select(Cluster).where(
+                    Cluster.user_id == tenant.tenant_id,
+                    Cluster.id != cluster.id,
+                    Cluster.algorithm_version == rules.algorithm_version,
+                    Cluster.status.in_([ClusterStatus.ACTIVE.value, ClusterStatus.STALE.value]),
+                )
+            )
+        )
+        for other in others:
+            if cluster.window_start is None or other.window_start is None:
+                continue
+            if abs(_utc(other.window_start) - _utc(cluster.window_start)) > window:
+                continue
+            similarity = await _cross_similarity(
+                session,
+                cluster,
+                other,
+                tenant=tenant,
+                index=index,
+                embed=embed,
+            )
+            if similarity is not None and should_merge_clusters(similarity, similarity, rules):
+                candidates.append((similarity, other))
+        if not candidates:
+            break
+        _, best = max(candidates, key=lambda candidate: (candidate[0], -candidate[1].id))
+        if len(await _cluster_articles(session, best, tenant=tenant)) > len(
+            await _cluster_articles(session, cluster, tenant=tenant)
+        ):
+            keep, absorb = best, cluster
+            moved = await _merge_clusters(session, keep, absorb, tenant=tenant, rules=rules, now=now)
+            await session.flush()
+            record_audit(
+                session,
+                user_id=tenant.tenant_id,
+                action="cluster.merged",
+                resource_type="cluster",
+                resource_id=str(absorb.id),
+                outcome="success",
+                actor_type="job",
+                actor_id="reconcile_cluster",
+                details={"absorbed_into": keep.id, "moved_members": moved},
+            )
+            await session.commit()
+            return merged + 1
+        moved = await _merge_clusters(session, cluster, best, tenant=tenant, rules=rules, now=now)
+        await session.flush()
+        record_audit(
+            session,
+            user_id=tenant.tenant_id,
+            action="cluster.merged",
+            resource_type="cluster",
+            resource_id=str(best.id),
+            outcome="success",
+            actor_type="job",
+            actor_id="reconcile_cluster",
+            details={"absorbed_into": cluster.id, "moved_members": moved},
+        )
+        await session.commit()
+        merged += 1
+    return merged
+
+
+async def _reclaim_unassigned_articles(
+    session: AsyncSession,
+    *,
+    tenant: TenantContext,
+    rules: ClusterRules,
+    index: EmbeddingIndex | Any | None,
+    embed: EmbedFunction | None,
+    limit: int = 20,
+) -> int:
+    unassigned = list(
+        await session.scalars(
+            select(Article)
+            .where(
+                Article.user_id == tenant.tenant_id,
+                Article.status == "published",
+                Article.cluster_id.is_(None),
+            )
+            .order_by(Article.id)
+            .limit(limit)
+        )
+    )
+    reclaimed = 0
+    for article in unassigned:
+        vector = await _safe_embed(embed, article)
+        if vector is None:
+            continue
+        await assign_article(session, article, tenant=tenant, vector=vector, index=index, rules=rules)
+        reclaimed += 1
+    return reclaimed
+
+
 async def reconcile_cluster(
     session: AsyncSession,
     cluster_id: int,
@@ -303,6 +568,8 @@ async def reconcile_cluster(
     correlation_id: str | None = None,
     actor_type: str = "job",
     actor_id: str | None = "reconcile_cluster",
+    index: EmbeddingIndex | Any | None = None,
+    embed: EmbedFunction | None = None,
 ) -> ClusterStatus | None:
     rules = rules or ClusterRules()
     cluster = await session.scalar(
@@ -334,15 +601,73 @@ async def reconcile_cluster(
         if article_ids
         else []
     )
-    event_times = [_article_time(article) for article in articles]
+    articles_by_id = {article.id: article for article in articles}
+    pruned = 0
+    for member in members:
+        article = articles_by_id.get(member.article_id)
+        if article is None:
+            continue
+        decision = evaluate_membership(
+            article_time=_article_time(article),
+            cluster_start=cluster.window_start or _article_time(article),
+            cluster_end=cluster.window_end or _article_time(article),
+            similarity_score=member.similarity_score,
+            rules=rules,
+        )
+        if decision.reason == "outside_temporal_window":
+            member.is_current = False
+            if article.cluster_id == cluster.id:
+                article.cluster_id = None
+            pruned += 1
+    now_value = now or datetime.now(UTC)
+    merged = 0
+    reclaimed = 0
+    if index is not None or embed is not None:
+        merged = await _merge_similar_clusters(
+            session,
+            cluster,
+            tenant=tenant,
+            rules=rules,
+            index=index,
+            embed=embed,
+            now=now_value,
+        )
+        reclaimed = await _reclaim_unassigned_articles(
+            session,
+            tenant=tenant,
+            rules=rules,
+            index=index,
+            embed=embed,
+        )
+    remaining_members = list(
+        await session.scalars(
+            select(ClusterMember).where(
+                ClusterMember.user_id == tenant.tenant_id,
+                ClusterMember.cluster_id == cluster_id,
+                ClusterMember.algorithm_version == rules.algorithm_version,
+                ClusterMember.is_current.is_(True),
+            )
+        )
+    )
+    remaining_ids = [member.article_id for member in remaining_members]
+    remaining_articles = (
+        list(
+            await session.scalars(
+                select(Article).where(Article.id.in_(remaining_ids), Article.user_id == tenant.tenant_id)
+            )
+        )
+        if remaining_ids
+        else []
+    )
+    event_times = [_article_time(article) for article in remaining_articles]
     if event_times:
         cluster.window_start = min(event_times)
         cluster.window_end = max(event_times)
     status = cluster_status(
-        member_count=len(members),
+        member_count=len(remaining_members),
         has_ambiguity=False,
-        last_event=max((_article_time(article) for article in articles), default=None),
-        now=now or datetime.now(UTC),
+        last_event=max((_article_time(article) for article in remaining_articles), default=None),
+        now=now_value,
     )
     cluster.status = status.value
     cluster.reconciled_at = datetime.now(UTC)
@@ -357,7 +682,13 @@ async def reconcile_cluster(
         correlation_id=correlation_id,
         actor_type=actor_type,
         actor_id=actor_id,
-        details={"status": status.value, "member_count": len(members)},
+        details={
+            "status": status.value,
+            "member_count": len(remaining_members),
+            "pruned": pruned,
+            "merged": merged,
+            "reclaimed": reclaimed,
+        },
     )
     await session.commit()
     return status

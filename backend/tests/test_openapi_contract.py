@@ -51,6 +51,25 @@ def test_openapi_contract_covers_public_surface_and_security() -> None:
             assert operation.get("security"), f"missing auth contract for {path}"
 
 
+def test_openapi_documents_scopes_and_common_error_responses() -> None:
+    document = json.loads(SNAPSHOT.read_text(encoding="utf-8"))
+    bearer = document["components"]["securitySchemes"]["HTTPBearer"]
+    assert "content:read" in bearer["scopes"]
+    assert "sources:write" in bearer["scopes"]
+    protected = next(
+        operation
+        for path, operations in document["paths"].items()
+        if path == "/api/v1/feed"
+        for operation in operations.values()
+        if isinstance(operation, dict)
+    )
+    for code in ("401", "403", "429", "503"):
+        assert code in protected["responses"]
+    public = document["paths"]["/api/v1/auth/login"]
+    login_operation = public["post"]
+    assert "401" not in login_operation["responses"]
+
+
 def test_mutation_schemas_reject_unknown_fields() -> None:
     schemas = json.loads(SNAPSHOT.read_text(encoding="utf-8"))["components"]["schemas"]
     for name in (

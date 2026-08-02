@@ -12,7 +12,7 @@ from app.audit.service import record_audit
 from app.briefings.service import generate_briefing
 from app.core.config import get_settings
 from app.core.context import ActorContext, TenantContext, serialize_job_context
-from app.db.models import Briefing, BriefingSchedule, DiscoveryRun, IngestionRun, Source, User
+from app.db.models import Briefing, BriefingSchedule, Cluster, DiscoveryRun, IngestionRun, Source, User
 from app.db.session import SessionFactory
 from app.discovery.jobs import discover_user
 from app.ingestion.jobs import ingest_discovered_article, ingest_source, reconcile_cluster
@@ -233,18 +233,60 @@ async def _schedule_briefings(session: Any, redis: Any, *, now: datetime) -> int
     return scheduled
 
 
+async def _schedule_cluster_reconciliation(session: Any, redis: Any, *, now: datetime) -> int:
+    """Enqueue reconciliation for clusters that have not been visited in the last 30 minutes."""
+    bucket = int(now.timestamp() // 1800)
+    cutoff = now - timedelta(minutes=30)
+    clusters = list(
+        await session.scalars(
+            select(Cluster)
+            .join(User, User.id == Cluster.user_id)
+            .where(
+                User.is_active.is_(True),
+                Cluster.status.in_(["active", "stale"]),
+                (Cluster.reconciled_at.is_(None)) | (Cluster.reconciled_at < cutoff),
+            )
+            .order_by(Cluster.reconciled_at.asc().nullsfirst(), Cluster.id)
+            .limit(20)
+        )
+    )
+    scheduled = 0
+    for cluster in clusters:
+        actor = _scheduler_actor(cluster.user_id)
+        await redis.enqueue_job(
+            "reconcile_cluster",
+            cluster.id,
+            serialize_job_context(actor),
+            _job_id=f"reconcile:{cluster.id}:{bucket}",
+        )
+        record_audit(
+            session,
+            user_id=cluster.user_id,
+            action="cluster.reconciliation_scheduled",
+            resource_type="cluster",
+            resource_id=str(cluster.id),
+            outcome="accepted",
+            actor=actor,
+            details={"bucket": bucket, "trigger": "scheduler"},
+        )
+        await session.commit()
+        scheduled += 1
+    return scheduled
+
+
 async def schedule_due_work(ctx: dict[str, Any]) -> dict[str, int]:
     """Dispatch due tenant work without doing the work inside the cron tick."""
 
     redis = ctx.get("redis")
     if redis is None:
-        return {"sources": 0, "discovery": 0, "briefings": 0}
+        return {"sources": 0, "discovery": 0, "briefings": 0, "clusters": 0}
     now = datetime.now(UTC)
     async with SessionFactory() as session:
         sources = await _schedule_sources(session, redis, now=now)
         discovery = await _schedule_discovery(session, redis, now=now)
         briefings = await _schedule_briefings(session, redis, now=now)
-    return {"sources": sources, "discovery": discovery, "briefings": briefings}
+        clusters = await _schedule_cluster_reconciliation(session, redis, now=now)
+    return {"sources": sources, "discovery": discovery, "briefings": briefings, "clusters": clusters}
 
 
 class WorkerSettings:

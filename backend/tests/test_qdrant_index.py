@@ -17,9 +17,9 @@ class FakeQdrant:
     async def collection_exists(self, _: str) -> bool:
         return self.exists
 
-    async def create_collection(self, **kwargs: object) -> bool:
+    async def create_collection(self, *, collection_name: str, vectors_config: object) -> bool:
         self.exists = True
-        self.created.append(kwargs)
+        self.created.append({"collection_name": collection_name, "vectors_config": vectors_config})
         return True
 
     async def upsert(self, **kwargs: object) -> None:

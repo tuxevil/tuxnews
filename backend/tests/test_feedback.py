@@ -82,6 +82,53 @@ async def test_feedback_is_append_only_idempotent_and_updates_only_target_compon
 
 
 @pytest.mark.asyncio
+async def test_like_boosts_article_score_and_dislike_penalizes(
+    auth_client: AsyncClient,
+    db_session: AsyncSession,
+    user_factory,
+    source_factory,
+    article_factory,
+) -> None:
+    user = User(email="boost-owner@example.com", password_hash=hash_password("boost-password"), role="user")
+    db_session.add(user)
+    await db_session.flush()
+    source = source_factory(user.id)
+    db_session.add(source)
+    await db_session.flush()
+    article = article_factory(user.id, source.id)
+    article.score_breakdown = {"semantic_similarity": 0.5, "source_reputation": 0.5}
+    db_session.add(article)
+    await db_session.commit()
+    login = await auth_client.post(
+        "/api/v1/auth/login",
+        json={"email": "boost-owner@example.com", "password": "boost-password"},
+    )
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    baseline = article.relevance_score
+
+    liked = await auth_client.post(
+        "/api/v1/feedback",
+        headers=headers,
+        json={"action_type": "article", "rating": "like", "article_id": article.id},
+    )
+    assert liked.status_code == 201
+    await db_session.refresh(article)
+    boosted = article.relevance_score
+    assert article.score_breakdown["feedback_penalty"] == -1.0
+    assert boosted > baseline
+
+    disliked = await auth_client.post(
+        "/api/v1/feedback",
+        headers=headers,
+        json={"action_type": "article", "rating": "dislike", "article_id": article.id},
+    )
+    assert disliked.status_code == 201
+    await db_session.refresh(article)
+    assert article.score_breakdown["feedback_penalty"] == 1.0
+    assert article.relevance_score < boosted
+
+
+@pytest.mark.asyncio
 async def test_source_and_topic_feedback_do_not_cross_components(
     auth_client: AsyncClient,
     db_session: AsyncSession,

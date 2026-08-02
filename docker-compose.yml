@@ -29,6 +29,11 @@ services:
       TUXNEWS_LLM_OUTPUT_COST_PER_MILLION_USD: ${TUXNEWS_LLM_OUTPUT_COST_PER_MILLION_USD:-0}
       TUXNEWS_LLM_COST_CURRENCY: ${TUXNEWS_LLM_COST_CURRENCY:-USD}
       TUXNEWS_LLM_USAGE_RETENTION_DAYS: ${TUXNEWS_LLM_USAGE_RETENTION_DAYS:-90}
+      TUXNEWS_LLM_DEFAULT_PROFILE: ${TUXNEWS_LLM_DEFAULT_PROFILE:-eco}
+      TUXNEWS_LLM_ECO_MODEL: ${TUXNEWS_LLM_ECO_MODEL:-ollama/llama3.2:3b}
+      TUXNEWS_LLM_CLOUD_MODEL: ${TUXNEWS_LLM_CLOUD_MODEL:-openai/gpt-4o-mini}
+      TUXNEWS_LLM_HYBRID_MODEL: ${TUXNEWS_LLM_HYBRID_MODEL:-openai/gpt-4o-mini}
+      OLLAMA_API_BASE: ${OLLAMA_API_BASE:-http://ollama:11434}
       TUXNEWS_AUDIT_RETENTION_DAYS: ${TUXNEWS_AUDIT_RETENTION_DAYS:-180}
       TUXNEWS_ACCESS_TOKEN_SECRET: ${TUXNEWS_ACCESS_TOKEN_SECRET:-local-only-change-me-access-please-change}
       TUXNEWS_REFRESH_TOKEN_SECRET: ${TUXNEWS_REFRESH_TOKEN_SECRET:-local-only-change-me-refresh-please-change}
@@ -84,6 +89,11 @@ services:
       TUXNEWS_LLM_OUTPUT_COST_PER_MILLION_USD: ${TUXNEWS_LLM_OUTPUT_COST_PER_MILLION_USD:-0}
       TUXNEWS_LLM_COST_CURRENCY: ${TUXNEWS_LLM_COST_CURRENCY:-USD}
       TUXNEWS_LLM_USAGE_RETENTION_DAYS: ${TUXNEWS_LLM_USAGE_RETENTION_DAYS:-90}
+      TUXNEWS_LLM_DEFAULT_PROFILE: ${TUXNEWS_LLM_DEFAULT_PROFILE:-eco}
+      TUXNEWS_LLM_ECO_MODEL: ${TUXNEWS_LLM_ECO_MODEL:-ollama/llama3.2:3b}
+      TUXNEWS_LLM_CLOUD_MODEL: ${TUXNEWS_LLM_CLOUD_MODEL:-openai/gpt-4o-mini}
+      TUXNEWS_LLM_HYBRID_MODEL: ${TUXNEWS_LLM_HYBRID_MODEL:-openai/gpt-4o-mini}
+      OLLAMA_API_BASE: ${OLLAMA_API_BASE:-http://ollama:11434}
       TUXNEWS_AUDIT_RETENTION_DAYS: ${TUXNEWS_AUDIT_RETENTION_DAYS:-180}
       TUXNEWS_ACCESS_TOKEN_SECRET: ${TUXNEWS_ACCESS_TOKEN_SECRET:-local-only-change-me-access-please-change}
       TUXNEWS_REFRESH_TOKEN_SECRET: ${TUXNEWS_REFRESH_TOKEN_SECRET:-local-only-change-me-refresh-please-change}
@@ -156,9 +166,15 @@ services:
 
   ollama:
     image: ollama/ollama:latest
-    profiles: [local]
+    ports:
+      - "${TUXNEWS_OLLAMA_PORT:-11434}:11434"
     volumes:
       - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
     networks: [private]
 
   backup:

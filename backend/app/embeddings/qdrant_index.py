@@ -65,11 +65,6 @@ class EmbeddingIndex:
                 await self.client.create_collection(
                     collection_name=self.collection,
                     vectors_config=models.VectorParams(size=self.spec.dimension, distance=models.Distance.COSINE),
-                    metadata={
-                        "embedding_model": self.spec.model,
-                        "embedding_version": self.spec.version,
-                        "embedding_dimension": self.spec.dimension,
-                    },
                 )
         except Exception:
             timer.finish(success=False)

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+import math
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any
@@ -23,8 +25,11 @@ from app.embeddings.qdrant_index import EmbeddingIndex
 from app.ingestion.content import extract_article_text
 from app.ingestion.feed_parser import parse_feed
 from app.ingestion.http_client import HttpFetchError, SafeHttpClient
+from app.observability import log_event
 from app.preferences.settings import resolve_user_settings
 from app.ranking.scoring import ScoreWeights, apply_score, calculate_score
+
+logger = logging.getLogger(__name__)
 
 
 def _attempt_from_context(ctx: dict[str, Any]) -> int:
@@ -104,6 +109,7 @@ async def _process_article(
     weights: ScoreWeights,
     source_reputation: float | None,
     allow_content_fallback: bool,
+    use_llm: bool = True,
 ) -> None:
     vector: list[float] | None = None
     if article.status in {ArticleStatus.DISCOVERED.value, ArticleStatus.FAILED.value}:
@@ -131,6 +137,7 @@ async def _process_article(
             title=article.title,
             content=article.content_clean or article.summary or "",
             profile=profile,
+            use_llm=use_llm,
         )
         if outcome.result is not None:
             article.title = outcome.result.title
@@ -201,9 +208,13 @@ async def _upsert_articles(
     actor: ActorContext,
     profile: str,
     weights: ScoreWeights,
+    index: EmbeddingIndex | Any | None = None,
 ) -> int:
     created = 0
-    index = EmbeddingIndex()
+    hybrid = profile == "hybrid"
+    published_this_run: list[Article] = []
+    owns_index = index is None
+    index = index or EmbeddingIndex()
     try:
         for entry in entries:
             article = await session.scalar(
@@ -255,10 +266,72 @@ async def _upsert_articles(
                 weights=weights,
                 source_reputation=source.reputation_score,
                 allow_content_fallback=True,
+                use_llm=not hybrid,
+            )
+            if hybrid and article.status == ArticleStatus.PUBLISHED.value:
+                published_this_run.append(article)
+        if hybrid and published_this_run:
+            await _curate_hybrid_top_tier(
+                session,
+                published_this_run,
+                curator=curator,
+                embedding_provider=embedding_provider,
+                index=index,
+                tenant=tenant,
+                actor=actor,
             )
         return created
     finally:
-        await index.aclose()
+        if owns_index:
+            await index.aclose()
+
+
+async def _curate_hybrid_top_tier(
+    session: Any,
+    articles: list[Article],
+    *,
+    curator: CurationService,
+    embedding_provider: EmbeddingProvider,
+    index: EmbeddingIndex,
+    tenant: TenantContext,
+    actor: ActorContext,
+) -> None:
+    """Hybrid profile: spend cloud LLM inference only on the top 20% of a batch."""
+    ranked = sorted(articles, key=lambda article: article.relevance_score, reverse=True)
+    top_n = max(1, math.ceil(len(ranked) * 0.2))
+    for article in ranked[:top_n]:
+        outcome = await curator.curate(
+            title=article.title,
+            content=article.content_clean or article.summary or "",
+            profile="cloud",
+        )
+        if outcome.result is not None:
+            article.title = outcome.result.title
+            article.summary = outcome.result.summary
+            article.tags = list(outcome.result.tags) or article.tags
+        else:
+            article.summary = outcome.fallback_summary
+        await session.flush()
+        try:
+            vector = await embedding_provider.embed(
+                f"{article.title}\n{article.summary or ''}\n{article.content_clean or ''}"
+            )
+            await index.upsert(
+                tenant=tenant,
+                article_id=article.id,
+                vector=vector,
+                canonical_url_hash=article.canonical_url_hash,
+            )
+        except Exception:
+            log_event(
+                logger,
+                "hybrid.reembed_failed",
+                level=logging.WARNING,
+                error_type="embedding_unavailable",
+                article_id=article.id,
+                actor_id=actor.actor_id,
+            )
+    await session.commit()
 
 
 @quota_guard(scope="content:write", operation="worker.ingest_source", payload_position=1)
@@ -489,19 +562,33 @@ async def reconcile_cluster(
     cluster_id: int,
     job_payload: Mapping[str, Any] | None = None,
 ) -> dict[str, object]:
-    """Recompute one story's temporal state without touching article ingestion."""
+    """Recompute one story: prune stale members, merge similar clusters, reclaim unassigned articles."""
     payload = job_payload if job_payload is not None else ctx
     job = job_context_from_payload(payload)
     if job is None:
         return {"status": "rejected", "cluster_id": cluster_id, "reason": "tenant context required"}
     tenant = job.tenant
-    async with SessionFactory() as session:
-        status = await reconcile_story_cluster(
-            session,
-            cluster_id,
-            tenant=tenant,
-            correlation_id=job.actor.correlation_id,
-            actor_type=job.actor.actor_type,
-            actor_id=job.actor.actor_id,
-        )
-        return {"status": status.value if status is not None else "missing", "cluster_id": cluster_id}
+    runtime_settings = get_settings()
+    provider = SentenceTransformerProvider(runtime_settings)
+    index = EmbeddingIndex(runtime_settings)
+    try:
+        await provider.ensure_available()
+    except Exception:
+        provider_ready = False
+    else:
+        provider_ready = True
+    try:
+        async with SessionFactory() as session:
+            status = await reconcile_story_cluster(
+                session,
+                cluster_id,
+                tenant=tenant,
+                correlation_id=job.actor.correlation_id,
+                actor_type=job.actor.actor_type,
+                actor_id=job.actor.actor_id,
+                index=index if provider_ready else None,
+                embed=provider.embed if provider_ready else None,
+            )
+            return {"status": status.value if status is not None else "missing", "cluster_id": cluster_id}
+    finally:
+        await index.aclose()

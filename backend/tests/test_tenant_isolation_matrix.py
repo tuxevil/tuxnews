@@ -108,8 +108,10 @@ async def test_rest_tenant_matrix_hides_overlapping_resources(
     assert hidden_feedback.status_code == 404
     assert hidden_briefing.status_code == 404
     assert all(item["id"] != article_b.id for item in feed_a.json()["items"])
+    source_a_ids = [source["id"] for source in sources_a.json()]
     assert all(source["id"] != source_b_id for source in sources_a.json())
-    assert sources_a.json()[0]["id"] == source_a.json()["id"]
+    assert source_a.json()["id"] in source_a_ids
+    assert len(sources_a.json()) == len(source_a_ids)
 
     settings_a = await auth_client.patch(
         "/api/v1/preferences/settings",

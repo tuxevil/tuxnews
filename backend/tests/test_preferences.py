@@ -100,6 +100,7 @@ async def test_profile_can_edit_reset_and_mute_without_erasing_history(
         )
     )
     assert [audit.action for audit in audits] == [
+        "source.static_sync",
         "feedback.created",
         "preferences.topic.updated",
         "preferences.source.muted",
@@ -119,8 +120,8 @@ async def test_preferences_are_isolated_by_user(
     other = user_factory()
     db_session.add_all([owner, other])
     await db_session.flush()
-    source = source_factory(owner.id)
-    db_session.add(source)
+    owner_source = source_factory(owner.id)
+    db_session.add(owner_source)
     await db_session.commit()
 
     registered = await auth_client.post(
@@ -131,15 +132,16 @@ async def test_preferences_are_isolated_by_user(
     other_headers = {"Authorization": f"Bearer {registered.json()['access_token']}"}
 
     hidden = await auth_client.patch(
-        f"/api/v1/preferences/sources/{source.id}",
+        f"/api/v1/preferences/sources/{owner_source.id}",
         headers=other_headers,
         json={"is_muted": True},
     )
     assert hidden.status_code == 404
     profile = await auth_client.get("/api/v1/preferences", headers=other_headers)
     assert profile.status_code == 200
-    assert profile.json()["sources"] == []
-
+    sources = profile.json()["sources"]
+    assert all(source["id"] != owner_source.id for source in sources)
+    assert sources and all(source["origin"] == "static" for source in sources)
 
 @pytest.mark.asyncio
 async def test_ranking_preference_is_persisted_bounded_and_audited(
@@ -173,7 +175,7 @@ async def test_ranking_preference_is_persisted_bounded_and_audited(
             select(AuditEvent).where(AuditEvent.user_id == registered.json()["user"]["id"])
         )
     )
-    assert [audit.action for audit in audits] == ["preferences.ranking.updated"]
+    assert [audit.action for audit in audits] == ["source.static_sync", "preferences.ranking.updated"]
 
 
 @pytest.mark.asyncio

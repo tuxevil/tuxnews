@@ -22,8 +22,9 @@ def _rating_delta(rating: str) -> float:
     return {"like": 1.0, "dislike": -1.0, "neutral": 0.0}.get(rating, 0.0)
 
 
-def _feedback_penalty(rating: str) -> float:
-    return 1.0 if rating == "dislike" else 0.0
+def _feedback_effect(rating: str) -> float:
+    """Signed feedback effect: dislike penalizes, like boosts, neutral is inert."""
+    return {"like": -1.0, "dislike": 1.0, "neutral": 0.0}.get(rating, 0.0)
 
 
 async def _current_feedback(
@@ -124,12 +125,12 @@ async def _recalculate_article_feedback(
         (event for event in events if event.action_type == "quality"),
         None,
     )
-    article_penalty = _feedback_penalty(article_feedback.rating) if article_feedback else 0.0
-    quality_penalty = _feedback_penalty(quality_feedback.rating) if quality_feedback else 0.0
+    article_effect = _feedback_effect(article_feedback.rating) if article_feedback else 0.0
+    quality_effect = _feedback_effect(quality_feedback.rating) if quality_feedback else 0.0
     result = calculate_score(
         semantic_similarity=breakdown.get("semantic_similarity"),
         source_reputation=breakdown.get("source_reputation"),
-        feedback_penalty=max(article_penalty, quality_penalty),
+        feedback_penalty=article_effect + quality_effect,
         text=article.content_clean,
         weights=weights,
     )
@@ -137,7 +138,7 @@ async def _recalculate_article_feedback(
     next_version = (article.feedback_version or 0) + 1
     article.score_breakdown = {
         **result.breakdown,
-        "quality_penalty": quality_penalty,
+        "quality_penalty": quality_effect,
         "feedback_version": float(next_version),
     }
     article.feedback_version = next_version

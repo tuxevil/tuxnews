@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -23,6 +24,7 @@ from app.api.schemas import (
 )
 from app.audit.service import record_audit
 from app.core.config import get_settings
+from app.core.context import ActorContext, TenantContext
 from app.core.permissions import scopes_for_role
 from app.core.security import (
     create_access_token,
@@ -35,6 +37,7 @@ from app.core.security import (
 )
 from app.db.models import User, UserSession
 from app.db.session import get_session
+from app.ingestion.sources import sync_static_sources
 from app.users.service import (
     accept_invitation,
     complete_email_change,
@@ -152,6 +155,16 @@ async def register(
             actor_type="user",
             actor_id=str(user.id),
             tenant_id=user.id,
+        )
+        await sync_static_sources(
+            session,
+            user.id,
+            Path(settings.sources_path),
+            actor=ActorContext(
+                tenant=TenantContext(user.id),
+                actor_type="user",
+                actor_id=str(user.id),
+            ),
         )
         return await _issue_tokens(
             response,

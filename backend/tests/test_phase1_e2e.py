@@ -42,7 +42,14 @@ class VerticalClient:
 
 
 class FallbackCurator:
-    async def curate(self, *, title: str, content: str, profile: str | None = None) -> CurationOutcome:
+    async def curate(
+        self,
+        *,
+        title: str,
+        content: str,
+        profile: str | None = None,
+        use_llm: bool = True,
+    ) -> CurationOutcome:
         return CurationOutcome(None, content, True, False, "provider_unavailable")
 
 

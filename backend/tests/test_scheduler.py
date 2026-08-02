@@ -54,7 +54,7 @@ async def test_scheduler_dispatches_due_source_and_discovery_work(
 
     result = await worker.schedule_due_work({"redis": redis})
 
-    assert result == {"sources": 1, "discovery": 1, "briefings": 0}
+    assert result == {"sources": 1, "discovery": 1, "briefings": 0, "clusters": 0}
     assert source_calls == [(source.id, "scheduler")]
     assert len(redis.jobs) == 1
     function, args, options = redis.jobs[0]

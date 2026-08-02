@@ -25,7 +25,10 @@ class CurationService:
         title: str,
         content: str,
         profile: LLMProfile | str | None = None,
+        use_llm: bool = True,
     ) -> CurationOutcome:
+        if not use_llm:
+            return CurationOutcome(None, deterministic_fallback(content), True, False, "hybrid_fallback")
         response: LLMResponse = await self.gateway.complete(
             instruction=(
                 "Return only a JSON object matching the supplied schema. "

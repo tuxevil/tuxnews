@@ -35,17 +35,20 @@ async def test_images_are_downloaded_confined_and_rewritten(tmp_path: Path) -> N
         ),
     )
     writer = AtomicArchiveWriter(tmp_path / "archive")
+    target_dir = Path("tenants/3/standalone/2026-08-01_image-article")
 
     downloaded = await ImageDownloader(FakeImageClient()).download_and_rewrite(
         article,
         writer,
         base_url="https://example.com/feed.xml",
+        target_dir=target_dir,
     )
 
     assert downloaded == 1
     assert article.image_local_path is not None
-    assert article.image_local_path.startswith("images/3/7/")
+    assert article.image_local_path.startswith("tenants/3/standalone/2026-08-01_image-article/assets/")
     assert "https://" not in (article.content_clean or "")
     assert "private" not in (article.content_clean or "")
     assert "script" not in (article.content_clean or "")
+    assert "src=\"assets/" in (article.content_clean or "")
     assert (tmp_path / "archive" / article.image_local_path).read_bytes() == b"png-bytes"

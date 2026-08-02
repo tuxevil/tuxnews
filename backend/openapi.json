@@ -2587,6 +2587,19 @@
     "securitySchemes": {
       "HTTPBearer": {
         "scheme": "bearer",
+        "scopes": {
+          "agent_tokens:read": "agent_tokens:read",
+          "agent_tokens:write": "agent_tokens:write",
+          "audit:read": "audit:read",
+          "content:read": "content:read",
+          "content:write": "content:write",
+          "feedback:write": "feedback:write",
+          "preferences:write": "preferences:write",
+          "sources:read": "sources:read",
+          "sources:write": "sources:write",
+          "usage:read": "usage:read",
+          "users:manage": "users:manage"
+        },
         "type": "http"
       }
     }
@@ -2610,6 +2623,18 @@
               }
             },
             "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -2685,6 +2710,12 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -2694,6 +2725,12 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -2721,6 +2758,18 @@
               }
             },
             "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -2758,6 +2807,12 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -2767,6 +2822,12 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -2805,6 +2866,12 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -2814,6 +2881,12 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -2850,6 +2923,12 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -2859,6 +2938,12 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -2925,6 +3010,12 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -2934,6 +3025,12 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -2964,6 +3061,18 @@
               }
             },
             "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -2995,6 +3104,12 @@
           "204": {
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -3004,6 +3119,12 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -3040,6 +3161,12 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -3049,6 +3176,12 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -3095,6 +3228,12 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -3104,6 +3243,12 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -3142,6 +3287,12 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -3151,6 +3302,12 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -3189,6 +3346,12 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -3198,6 +3361,12 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -3228,6 +3397,18 @@
               }
             },
             "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -3263,6 +3444,12 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -3272,6 +3459,12 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -3310,6 +3503,12 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -3319,6 +3518,12 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -3357,6 +3562,12 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -3366,6 +3577,12 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -3403,6 +3620,12 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -3412,6 +3635,12 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -3582,6 +3811,18 @@
               }
             },
             "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -3798,6 +4039,12 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -3807,6 +4054,12 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -3844,6 +4097,12 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -3853,6 +4112,12 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -3879,6 +4144,18 @@
               }
             },
             "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -3914,6 +4191,12 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -3923,6 +4206,12 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -3964,6 +4253,12 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -3973,6 +4268,12 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -4011,6 +4312,12 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -4020,6 +4327,12 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -4058,6 +4371,12 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -4067,6 +4386,12 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -4097,6 +4422,18 @@
               }
             },
             "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -4135,6 +4472,12 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -4144,6 +4487,12 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -4314,6 +4663,12 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -4323,6 +4678,12 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -4369,6 +4730,12 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -4378,6 +4745,12 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -4413,6 +4786,12 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -4422,6 +4801,12 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -4460,6 +4845,12 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -4469,6 +4860,12 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -4495,6 +4892,18 @@
               }
             },
             "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -4521,6 +4930,18 @@
               }
             },
             "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -4556,6 +4977,12 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -4565,6 +4992,12 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -4591,6 +5024,18 @@
               }
             },
             "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -4626,6 +5071,12 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -4635,6 +5086,12 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -4665,6 +5122,18 @@
               }
             },
             "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -4713,6 +5182,12 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -4722,6 +5197,12 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -4780,6 +5261,12 @@
           "204": {
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -4789,6 +5276,12 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -4819,6 +5312,18 @@
               }
             },
             "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -4877,6 +5382,12 @@
           "204": {
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -4886,6 +5397,12 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -4932,6 +5449,12 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -4941,6 +5464,12 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -4999,6 +5528,12 @@
           "204": {
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -5008,6 +5543,12 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -5038,6 +5579,18 @@
               }
             },
             "description": "Successful Response"
+          },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -5073,6 +5626,12 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -5082,6 +5641,12 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -5113,6 +5678,12 @@
           "204": {
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -5122,6 +5693,12 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -5158,6 +5735,12 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -5167,6 +5750,12 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -5213,6 +5802,12 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -5222,6 +5817,12 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [
@@ -5260,6 +5861,12 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "description": "Missing or expired bearer token"
+          },
+          "403": {
+            "description": "The token lacks a required scope for this operation"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -5269,6 +5876,12 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "Rate limit or quota exceeded; retry after the reset window"
+          },
+          "503": {
+            "description": "A dependency service (database, Redis, Qdrant) is unavailable"
           }
         },
         "security": [

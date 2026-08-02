@@ -31,7 +31,14 @@ class ImageDownloader:
         writer: AtomicArchiveWriter,
         *,
         base_url: str | None = None,
+        target_dir: Path | None = None,
     ) -> int:
+        """Download article images into ``target_dir/assets`` and rewrite markdown sources.
+
+        When ``target_dir`` is the folder that will hold the Markdown document, the
+        rewritten ``src`` attributes are relative to it (``assets/<name>``) so the
+        export remains readable offline as a folder.
+        """
         if article.id is None or not article.content_clean:
             return 0
         soup = BeautifulSoup(nh3.clean(article.content_clean), "html.parser")
@@ -56,12 +63,18 @@ class ImageDownloader:
                     if extension is None:
                         raise HttpFetchError("unsupported image type")
                     digest = hashlib.sha256(result.url.encode("utf-8")).hexdigest()[:16]
-                    relative_path = Path("images") / str(article.user_id) / str(article.id) / f"{digest}.{extension}"
-                    stored = writer.write_bytes(relative_path, result.content)
+                    if target_dir is not None:
+                        directory = target_dir / "assets"
+                    else:
+                        directory = Path("images") / str(article.user_id) / str(article.id)
+                    stored = writer.write_bytes(directory / f"{digest}.{extension}", result.content)
                 except (HttpFetchError, OSError, ValueError):
                     image.decompose()
                     continue
-                image["src"] = stored.relative_path
+                if target_dir is not None:
+                    image["src"] = Path(stored.relative_path).relative_to(target_dir).as_posix()
+                else:
+                    image["src"] = stored.relative_path
                 image.attrs.pop("srcset", None)
                 downloaded += 1
                 first_path = first_path or stored.relative_path

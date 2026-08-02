@@ -181,6 +181,31 @@ h2 { font-size: clamp(1.65rem, 3vw, 2.55rem); line-height: .98; }
 .advanced-popover span { color: var(--soft); font-family: "DM Mono", monospace; font-size: .55rem; letter-spacing: .08em; padding: 5px 7px 8px; text-transform: uppercase; }
 .advanced-popover button { background: none; border: 0; color: var(--text); font-size: .75rem; padding: 7px; text-align: left; }
 .advanced-popover button:hover { background: var(--line); color: var(--accent); }
+.advanced-popover button.active { color: var(--accent); }
+.advanced-popover button.active::before { color: var(--accent); content: "✓ "; font-weight: 700; }
+
+.mindmap-panel { border: 1px solid var(--line); margin-top: 42px; padding: 24px; }
+.mindmap-heading { align-items: center; display: flex; flex-wrap: wrap; gap: 24px; justify-content: space-between; }
+.mindmap-heading h2 { font-size: clamp(1.5rem, 3vw, 2.4rem); margin-top: 8px; }
+.mindmap-edit { align-items: center; background: var(--panel-bright); border: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 12px; padding: 12px; }
+.mindmap-edit label { color: var(--muted); font-size: .7rem; }
+.mindmap-edit input[type="range"] { display: block; margin-top: 4px; }
+.mindmap-svg { display: block; height: auto; margin: 20px auto 0; max-width: 480px; width: 100%; }
+.mindmap-edge { stroke: var(--line); }
+.mindmap-edge.negative { stroke: var(--danger); opacity: .5; }
+.mindmap-node { cursor: pointer; }
+.mindmap-node circle { fill: color-mix(in srgb, var(--accent) 16%, var(--panel)); stroke: var(--accent); stroke-width: 1.5; }
+.mindmap-node circle.negative { fill: color-mix(in srgb, var(--danger) 14%, var(--panel)); stroke: var(--danger); }
+.mindmap-node text { fill: var(--text); font-family: "DM Mono", monospace; font-size: .52rem; letter-spacing: .04em; pointer-events: none; text-transform: uppercase; }
+.mindmap-node:focus circle, .mindmap-node:hover circle { stroke-width: 3; }
+.mindmap-center circle { fill: var(--panel-bright); stroke: var(--accent); stroke-width: 2; }
+.mindmap-center text { fill: var(--text); font-family: "DM Mono", monospace; font-size: .5rem; letter-spacing: .08em; }
+.mindmap-source-rail { display: flex; flex-wrap: wrap; gap: 18px 26px; margin-top: 26px; }
+.mindmap-source { align-items: center; display: flex; flex-direction: column; font-family: "DM Mono", monospace; font-size: .58rem; gap: 5px; letter-spacing: .05em; min-width: 130px; text-transform: uppercase; }
+.mindmap-source.muted span:first-child { color: var(--muted); text-decoration: line-through; }
+.source-track { background: var(--line); display: block; height: 5px; width: 130px; }
+.source-track span { background: var(--accent); display: block; height: 5px; }
+.mindmap-source.muted .source-track span { background: var(--danger); }
 .load-more { display: block; margin: 34px auto 0; }
 .empty-state, .error-state { border: 1px solid var(--line); margin-top: 34px; max-width: 620px; padding: 48px; }
 .empty-index { color: var(--accent); font-size: .63rem; }

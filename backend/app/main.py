@@ -3,6 +3,7 @@ import re
 import time
 from contextlib import asynccontextmanager
 from hashlib import sha256
+from typing import Any
 from uuid import uuid4
 
 from fastapi import FastAPI
@@ -29,6 +30,7 @@ from app.api.routes.telemetry import router as telemetry_router
 from app.api.routes.usage import router as usage_router
 from app.api.routes.users import router as users_router
 from app.core.config import get_settings
+from app.core.permissions import Scope
 from app.core.quota import QuotaService
 from app.core.rate_limit import RateLimitDecision, RedisRateLimiter
 from app.mcp.server import MCP_MOUNT_PATH, mcp_http_app
@@ -36,6 +38,35 @@ from app.observability import bind_context, log_event, metrics, normalize_operat
 
 logger = logging.getLogger("tuxnews.http")
 REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{1,64}$")
+
+COMMON_ERROR_RESPONSES: dict[str, dict[str, str]] = {
+    "401": {"description": "Missing or expired bearer token"},
+    "403": {"description": "The token lacks a required scope for this operation"},
+    "429": {"description": "Rate limit or quota exceeded; retry after the reset window"},
+    "503": {"description": "A dependency service (database, Redis, Qdrant) is unavailable"},
+}
+
+
+def _annotate_openapi(document: dict[str, Any]) -> dict[str, Any]:
+    """Document bearer scopes and common error responses for protected operations."""
+    components = document.setdefault("components", {})
+    schemes = components.setdefault("securitySchemes", {})
+    bearer = schemes.get("HTTPBearer")
+    if isinstance(bearer, dict):
+        bearer.setdefault(
+            "scopes",
+            {scope.value: scope.value for scope in Scope},
+        )
+    for _path, item in document.get("paths", {}).items():
+        if not isinstance(item, dict):
+            continue
+        for operation in item.values():
+            if not isinstance(operation, dict) or not operation.get("security"):
+                continue
+            responses = operation.setdefault("responses", {})
+            for code, payload in COMMON_ERROR_RESPONSES.items():
+                responses.setdefault(code, payload)
+    return document
 
 
 @asynccontextmanager
@@ -183,6 +214,12 @@ def create_app() -> FastAPI:
     app.include_router(usage_router)
     app.include_router(telemetry_router)
     app.mount(MCP_MOUNT_PATH, mcp_http_app)
+    default_openapi = app.openapi
+
+    def annotated_openapi() -> dict[str, Any]:
+        return _annotate_openapi(default_openapi())
+
+    app.openapi = annotated_openapi  # type: ignore[method-assign]
     return app
 
 

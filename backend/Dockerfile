@@ -10,6 +10,6 @@ COPY alembic.ini ./
 COPY alembic ./alembic
 COPY sources.yaml ./
 RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu "torch==2.13.0+cpu"
-RUN pip install --no-cache-dir ".[embeddings]"
+RUN pip install --no-cache-dir ".[embeddings,ai]"
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
