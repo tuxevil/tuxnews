@@ -102,7 +102,8 @@ def test_worker_queue_backlog_fires_when_deep() -> None:
     assert "worker_queue_backlog" in fired
 
 
-def test_cooldown_suppresses_repeated_firing(caplog) -> None:
+def test_cooldown_suppresses_repeated_firing(caplog, monkeypatch) -> None:
+    monkeypatch.setattr("app.observability.alerts.time.monotonic", lambda: 100.0)
     cooldown = AlertCooldown(seconds=3_600)
     assert cooldown.allow("http_error_rate") is True
     cooldown.mark_fired("http_error_rate")

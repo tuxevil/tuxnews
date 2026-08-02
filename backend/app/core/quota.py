@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
+import weakref
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
-from functools import lru_cache, wraps
+from functools import wraps
 from typing import Any
 from uuid import uuid4
 
@@ -311,10 +313,17 @@ class QuotaService:
         }
 
 
-@lru_cache(maxsize=1)
+_quota_services: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, QuotaService] = weakref.WeakKeyDictionary()
+
+
 def get_quota_service() -> QuotaService:
-    settings = get_settings()
-    return QuotaService(Redis.from_url(settings.redis_url), settings)
+    loop = asyncio.get_running_loop()
+    service = _quota_services.get(loop)
+    if service is None:
+        settings = get_settings()
+        service = QuotaService(Redis.from_url(settings.redis_url), settings)
+        _quota_services[loop] = service
+    return service
 
 
 async def enforce_job_quota(

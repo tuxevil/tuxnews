@@ -45,8 +45,8 @@ class AlertCooldown:
         self._last_fired: dict[str, float] = {}
 
     def allow(self, rule: str) -> bool:
-        last = self._last_fired.get(rule, 0.0)
-        return time.monotonic() - last >= self.seconds
+        last = self._last_fired.get(rule)
+        return last is None or time.monotonic() - last >= self.seconds
 
     def mark_fired(self, rule: str) -> None:
         self._last_fired[rule] = time.monotonic()
