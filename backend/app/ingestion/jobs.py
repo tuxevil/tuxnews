@@ -90,6 +90,104 @@ async def _retry_or_fail(
     raise Retry(defer=_backoff_seconds(attempt))
 
 
+async def _process_article(
+    session: Any,
+    article: Article,
+    *,
+    client: SafeHttpClient,
+    curator: CurationService,
+    embedding_provider: EmbeddingProvider,
+    index: EmbeddingIndex,
+    tenant: TenantContext,
+    actor: ActorContext,
+    profile: str,
+    weights: ScoreWeights,
+    source_reputation: float | None,
+    allow_content_fallback: bool,
+) -> None:
+    vector: list[float] | None = None
+    if article.status in {ArticleStatus.DISCOVERED.value, ArticleStatus.FAILED.value}:
+        transition_article(article, ArticleStatus.FETCHING)
+    if article.status == ArticleStatus.FETCHING.value:
+        try:
+            fetched = await client.fetch(article.url)
+            extracted = await asyncio.to_thread(
+                extract_article_text,
+                fetched.content,
+                url=article.url,
+            )
+        except HttpFetchError:
+            if not allow_content_fallback:
+                raise
+            extracted = None
+        if not allow_content_fallback and not extracted:
+            raise HttpFetchError("article content could not be extracted")
+        article.content_clean = extracted or article.content_clean or article.summary
+        if not article.content_clean:
+            raise HttpFetchError("article has no usable content")
+        transition_article(article, ArticleStatus.EXTRACTED)
+    if article.status == ArticleStatus.EXTRACTED.value:
+        outcome = await curator.curate(
+            title=article.title,
+            content=article.content_clean or article.summary or "",
+            profile=profile,
+        )
+        if outcome.result is not None:
+            article.title = outcome.result.title
+            article.summary = outcome.result.summary
+            article.tags = list(outcome.result.tags) or article.tags
+        else:
+            article.summary = outcome.fallback_summary
+        await session.flush()
+        semantic_similarity = None
+        try:
+            vector = await embedding_provider.embed(
+                f"{article.title}\n{article.summary or ''}\n{article.content_clean or ''}"
+            )
+            await index.upsert(
+                tenant=tenant,
+                article_id=article.id,
+                vector=vector,
+                canonical_url_hash=article.canonical_url_hash,
+            )
+            article.embedding_model = embedding_provider.spec.model
+            article.embedding_version = embedding_provider.spec.version
+            hits = await index.search(user_id=article.user_id, vector=vector, limit=20)
+            semantic_similarity = max(
+                (hit.score for hit in hits if hit.article_id != article.id),
+                default=None,
+            )
+        except Exception:
+            vector = None
+            article.embedding_model = None
+            article.embedding_version = None
+        apply_score(
+            article,
+            calculate_score(
+                semantic_similarity=semantic_similarity,
+                source_reputation=source_reputation,
+                feedback_penalty=None,
+                text=article.content_clean,
+                weights=weights,
+            ),
+        )
+        transition_article(article, ArticleStatus.CURATED)
+    if article.status == ArticleStatus.CURATED.value:
+        transition_article(article, ArticleStatus.INDEXED)
+    if article.status == ArticleStatus.INDEXED.value:
+        transition_article(article, ArticleStatus.PUBLISHED)
+        await assign_article(
+            session,
+            article,
+            tenant=tenant,
+            vector=vector if article.embedding_model is not None else None,
+            index=index if article.embedding_model is not None else None,
+            correlation_id=actor.correlation_id,
+            actor_type=actor.actor_type,
+            actor_id=actor.actor_id,
+        )
+
+
 async def _upsert_articles(
     session: Any,
     run: IngestionRun,
@@ -108,7 +206,6 @@ async def _upsert_articles(
     index = EmbeddingIndex()
     try:
         for entry in entries:
-            vector: list[float] | None = None
             article = await session.scalar(
                 select(Article).where(
                     Article.user_id == run.user_id,
@@ -145,78 +242,20 @@ async def _upsert_articles(
                 article.summary = entry.summary
                 article.tags = list(entry.tags)
                 article.published_at = entry.published_at
-            if article.status == ArticleStatus.DISCOVERED.value or article.status == ArticleStatus.FAILED.value:
-                transition_article(article, ArticleStatus.FETCHING)
-            if article.status == ArticleStatus.FETCHING.value:
-                try:
-                    fetched = await client.fetch(entry.url)
-                    extracted = await asyncio.to_thread(
-                        extract_article_text,
-                        fetched.content,
-                        url=entry.url,
-                    )
-                except HttpFetchError:
-                    extracted = None
-                article.content_clean = extracted or article.content_clean or article.summary
-                transition_article(article, ArticleStatus.EXTRACTED)
-            if article.status == ArticleStatus.EXTRACTED.value:
-                outcome = await curator.curate(
-                    title=article.title,
-                    content=article.content_clean or article.summary or "",
-                    profile=profile,
-                )
-                if outcome.result is not None:
-                    article.title = outcome.result.title
-                    article.summary = outcome.result.summary
-                    article.tags = list(outcome.result.tags) or article.tags
-                else:
-                    article.summary = outcome.fallback_summary
-                await session.flush()
-                semantic_similarity = None
-                try:
-                    vector = await embedding_provider.embed(
-                        f"{article.title}\n{article.summary or ''}\n{article.content_clean or ''}"
-                    )
-                    await index.upsert(
-                        tenant=tenant,
-                        article_id=article.id,
-                        vector=vector,
-                        canonical_url_hash=article.canonical_url_hash,
-                    )
-                    article.embedding_model = embedding_provider.spec.model
-                    article.embedding_version = embedding_provider.spec.version
-                    hits = await index.search(user_id=article.user_id, vector=vector, limit=20)
-                    semantic_similarity = max(
-                        (hit.score for hit in hits if hit.article_id != article.id),
-                        default=None,
-                    )
-                except Exception:
-                    vector = None
-                apply_score(
-                    article,
-                    calculate_score(
-                        semantic_similarity=semantic_similarity,
-                        source_reputation=source.reputation_score,
-                        feedback_penalty=None,
-                        text=article.content_clean,
-                        weights=weights,
-                    ),
-                )
-                transition_article(article, ArticleStatus.CURATED)
-            if article.status == ArticleStatus.CURATED.value:
-                transition_article(article, ArticleStatus.INDEXED)
-            if article.status == ArticleStatus.INDEXED.value:
-                transition_article(article, ArticleStatus.PUBLISHED)
-                await assign_article(
-                    session,
-                    article,
-                    tenant=tenant,
-                    vector=vector if article.embedding_model is not None else None,
-                    index=index if article.embedding_model is not None else None,
-                    correlation_id=actor.correlation_id,
-                    actor_type=actor.actor_type,
-                    actor_id=actor.actor_id,
-                )
+            await _process_article(
+                session,
+                article,
+                client=client,
+                curator=curator,
+                embedding_provider=embedding_provider,
+                index=index,
+                tenant=tenant,
+                actor=actor,
+                profile=profile,
+                weights=weights,
+                source_reputation=source.reputation_score,
+                allow_content_fallback=True,
+            )
         return created
     finally:
         await index.aclose()
@@ -347,6 +386,101 @@ async def ingest_source(
                 "ingestion failed unexpectedly",
                 actor,
             )
+
+
+@quota_guard(scope="content:write", operation="worker.ingest_discovered_article", payload_position=1)
+async def ingest_discovered_article(
+    ctx: dict[str, Any],
+    article_id: int,
+    job_payload: Mapping[str, Any] | None = None,
+) -> dict[str, object]:
+    """Fetch and publish one article created by web discovery."""
+
+    payload = job_payload if job_payload is not None else ctx
+    job = job_context_from_payload(payload)
+    if job is None or isinstance(article_id, bool) or article_id < 1:
+        return {"status": "rejected", "article_id": article_id, "reason": "tenant context required"}
+    tenant = job.tenant
+    actor = job.actor
+    settings = get_settings()
+    attempt = _attempt_from_context(ctx)
+    async with SessionFactory() as session:
+        article = await session.scalar(
+            select(Article).where(Article.id == article_id, Article.user_id == tenant.tenant_id)
+        )
+        if article is None:
+            return {"status": "missing", "article_id": article_id}
+        if article.status == ArticleStatus.PUBLISHED.value:
+            return {"status": "published", "article_id": article_id, "attempt": attempt}
+        if article.status not in {
+            ArticleStatus.DISCOVERED.value,
+            ArticleStatus.FAILED.value,
+            ArticleStatus.EXTRACTED.value,
+            ArticleStatus.CURATED.value,
+            ArticleStatus.INDEXED.value,
+        }:
+            return {"status": article.status, "article_id": article_id, "attempt": attempt}
+        source = await session.scalar(
+            select(Source).where(Source.id == article.source_id, Source.user_id == tenant.tenant_id)
+        )
+        user = await session.scalar(select(User).where(User.id == tenant.tenant_id, User.is_active.is_(True)))
+        if source is None or user is None:
+            return {"status": "missing", "article_id": article_id}
+        user_settings = resolve_user_settings(user.settings_json, settings)
+        index = EmbeddingIndex()
+        try:
+            async with SafeHttpClient(settings) as client:
+                await _process_article(
+                    session,
+                    article,
+                    client=client,
+                    curator=CurationService(),
+                    embedding_provider=SentenceTransformerProvider(settings),
+                    index=index,
+                    tenant=tenant,
+                    actor=actor,
+                    profile=user_settings.llm_profile,
+                    weights=ScoreWeights.from_user_settings(user_settings),
+                    source_reputation=source.reputation_score,
+                    allow_content_fallback=False,
+                )
+            record_audit(
+                session,
+                user_id=tenant.tenant_id,
+                action="discovery.article_processed",
+                resource_type="article",
+                resource_id=str(article.id),
+                outcome="success",
+                actor=actor,
+                details={"attempt": attempt},
+            )
+            await session.commit()
+            return {"status": article.status, "article_id": article_id, "attempt": attempt}
+        except Exception as exc:
+            await session.rollback()
+            article = await session.scalar(
+                select(Article).where(Article.id == article_id, Article.user_id == tenant.tenant_id)
+            )
+            if article is None:
+                return {"status": "missing", "article_id": article_id}
+            error_type = type(exc).__name__
+            transition_article(article, ArticleStatus.FAILED, error=error_type)
+            record_audit(
+                session,
+                user_id=tenant.tenant_id,
+                action="discovery.article_processing_failed",
+                resource_type="article",
+                resource_id=str(article.id),
+                outcome="retrying" if attempt < settings.ingestion_max_attempts else "failure",
+                actor=actor,
+                details={"attempt": attempt, "error_type": error_type},
+            )
+            await session.commit()
+            if attempt < settings.ingestion_max_attempts:
+                raise Retry(defer=_backoff_seconds(attempt)) from exc
+            return {"status": "failed", "article_id": article_id, "attempt": attempt}
+        finally:
+            await index.aclose()
 
 
 @quota_guard(scope="content:write", operation="worker.reconcile_cluster", payload_position=1)

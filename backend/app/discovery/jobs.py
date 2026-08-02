@@ -13,7 +13,7 @@ from sqlalchemy import select
 
 from app.audit.service import record_audit
 from app.core.config import get_settings
-from app.core.context import job_context_from_payload
+from app.core.context import job_context_from_payload, serialize_job_context
 from app.core.quota import quota_guard
 from app.db.models import Article, DiscoveryRun, Source, User, UserTopic
 from app.db.session import SessionFactory
@@ -104,21 +104,21 @@ async def _persist_candidate(
     query: DiscoveryQuery,
     candidate: SearchCandidate,
     weights: ScoreWeights,
-) -> bool:
+) -> int | None:
     try:
         canonical_url = canonicalize_url(candidate.url)
     except ValueError:
-        return False
+        return None
     canonical_hash = hashlib.sha256(canonical_url.encode("utf-8")).hexdigest()
     existing = await session.scalar(
         select(Article).where(Article.user_id == user_id, Article.canonical_url_hash == canonical_hash)
     )
     if existing is not None:
-        return False
+        return None
     title = _clean_external_text(candidate.title, 500)
     snippet = _clean_external_text(candidate.snippet, 4_000) or None
     if not title:
-        return False
+        return None
     article = Article(
         user_id=user_id,
         source_id=source.id,
@@ -143,7 +143,8 @@ async def _persist_candidate(
         ),
     )
     session.add(article)
-    return True
+    await session.flush()
+    return article.id
 
 
 async def _run_queries(
@@ -157,9 +158,10 @@ async def _run_queries(
     max_results: int,
     max_candidates: int,
     weights: ScoreWeights,
-) -> tuple[int, list[str]]:
+) -> tuple[int, list[str], list[int]]:
     created = 0
     errors: list[str] = []
+    article_ids: list[int] = []
     seen_urls: set[str] = set()
     for query in queries:
         try:
@@ -187,16 +189,18 @@ async def _run_queries(
                 provider=candidate.provider,
                 provider_version=candidate.provider_version,
             )
-            if await _persist_candidate(
+            article_id = await _persist_candidate(
                 session,
                 user_id=user.id,
                 source=source,
                 query=query,
                 candidate=normalized_candidate,
                 weights=weights,
-            ):
+            )
+            if article_id is not None:
                 created += 1
-    return created, errors
+                article_ids.append(article_id)
+    return created, errors, article_ids
 
 
 @quota_guard(scope="news:read", operation="worker.discover_user", provider="search", payload_position=2)
@@ -213,6 +217,7 @@ async def discover_user(
         return {"status": "rejected", "user_id": user_id, "reason": "tenant context required"}
     tenant = job.tenant
     actor = job.actor
+    redis = ctx.get("redis")
     slot_key = (slot_key or "").strip()[:64] or datetime.now(UTC).strftime("%Y-%m-%dT%H")
     async with SessionFactory() as session:
         user = await session.scalar(
@@ -293,7 +298,7 @@ async def discover_user(
         validator = ctx.get("url_validator")
         if validator is None:
             async with SafeHttpClient(settings) as client:
-                created, errors = await _run_queries(
+                    created, errors, article_ids = await _run_queries(
                     session,
                     user=user,
                     source=source,
@@ -305,7 +310,7 @@ async def discover_user(
                     weights=ScoreWeights.from_user_settings(user_settings),
                 )
         else:
-            created, errors = await _run_queries(
+                created, errors, article_ids = await _run_queries(
                 session,
                 user=user,
                 source=source,
@@ -332,11 +337,22 @@ async def discover_user(
             details={"queries": len(queries), "created": created, "errors": len(errors)},
         )
         await session.commit()
+        queued = 0
+        if redis is not None:
+            for article_id in article_ids:
+                await redis.enqueue_job(
+                    "ingest_discovered_article",
+                    article_id,
+                    serialize_job_context(actor),
+                    _job_id=f"discovery-ingest:{article_id}",
+                )
+                queued += 1
         return {
             "status": run.status,
             "run_id": run.id,
             "slot_key": slot_key,
             "queries": len(queries),
             "created": created,
+            "queued": queued,
             "errors": errors,
         }

@@ -15,7 +15,7 @@ from app.core.context import ActorContext, TenantContext, serialize_job_context
 from app.db.models import Briefing, BriefingSchedule, DiscoveryRun, IngestionRun, Source, User
 from app.db.session import SessionFactory
 from app.discovery.jobs import discover_user
-from app.ingestion.jobs import ingest_source, reconcile_cluster
+from app.ingestion.jobs import ingest_discovered_article, ingest_source, reconcile_cluster
 from app.ingestion.queue import enqueue_source_ingestion
 from app.observability import log_event, metrics
 
@@ -248,7 +248,14 @@ async def schedule_due_work(ctx: dict[str, Any]) -> dict[str, int]:
 
 
 class WorkerSettings:
-    functions = [heartbeat, ingest_source, reconcile_cluster, discover_user, generate_briefing]
+    functions = [
+        heartbeat,
+        ingest_source,
+        ingest_discovered_article,
+        reconcile_cluster,
+        discover_user,
+        generate_briefing,
+    ]
     cron_jobs = [
         cron("app.usage.service.purge_usage_events", hour=3, minute=0),
         cron("app.audit.service.purge_audit_events", hour=3, minute=15),

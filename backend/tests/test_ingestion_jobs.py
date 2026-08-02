@@ -28,6 +28,9 @@ to identify the main content and return a useful plain text result.</p>
 
 
 class SuccessfulClient:
+    def __init__(self, *_: object) -> None:
+        pass
+
     async def __aenter__(self) -> "SuccessfulClient":
         return self
 
@@ -45,6 +48,9 @@ class SuccessfulClient:
 
 
 class FailingClient:
+    def __init__(self, *_: object) -> None:
+        pass
+
     async def __aenter__(self) -> "FailingClient":
         return self
 
@@ -197,6 +203,97 @@ async def test_ingestion_publishes_with_explicit_score_fallback_when_embedding_f
     assert article.score_breakdown["fallback"] == 1.0
     assert article.cluster_id is not None
     assert embedding_index.upserts == []
+
+
+@pytest.mark.asyncio
+async def test_discovered_article_job_reuses_the_safe_processing_pipeline(
+    db_engine: AsyncEngine,
+    db_session: AsyncSession,
+    user_factory,
+    source_factory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = user_factory()
+    db_session.add(user)
+    await db_session.flush()
+    source = source_factory(user.id)
+    db_session.add(source)
+    await db_session.flush()
+    article = Article(
+        user_id=user.id,
+        source_id=source.id,
+        title="Discovered article",
+        original_title="Discovered article",
+        url="https://example.test/article/1",
+        canonical_url_hash="c" * 64,
+        content_clean="Search result snippet",
+        summary="Search result snippet",
+    )
+    db_session.add(article)
+    await db_session.commit()
+
+    session_factory = async_sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
+    monkeypatch.setattr(jobs, "SessionFactory", session_factory)
+    monkeypatch.setattr(jobs, "SafeHttpClient", SuccessfulClient)
+    monkeypatch.setattr(jobs, "CurationService", SuccessfulCurator)
+    embedding_provider = SuccessfulEmbeddingProvider()
+    embedding_index = SuccessfulEmbeddingIndex()
+    monkeypatch.setattr(jobs, "SentenceTransformerProvider", lambda _: embedding_provider)
+    monkeypatch.setattr(jobs, "EmbeddingIndex", lambda: embedding_index)
+
+    result = await jobs.ingest_discovered_article({"job_try": 1, "tenant_id": user.id}, article.id)
+
+    assert result["status"] == "published"
+    await db_session.refresh(article)
+    assert article.status == "published"
+    assert article.cluster_id is not None
+    assert "sufficiently long article body" in (article.content_clean or "")
+    repeated = await jobs.ingest_discovered_article({"job_try": 1, "tenant_id": user.id}, article.id)
+    assert repeated["status"] == "published"
+
+
+@pytest.mark.asyncio
+async def test_discovered_article_job_retries_and_marks_failure(
+    db_engine: AsyncEngine,
+    db_session: AsyncSession,
+    user_factory,
+    source_factory,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = user_factory()
+    db_session.add(user)
+    await db_session.flush()
+    source = source_factory(user.id)
+    db_session.add(source)
+    await db_session.flush()
+    article = Article(
+        user_id=user.id,
+        source_id=source.id,
+        title="Unavailable article",
+        original_title="Unavailable article",
+        url="https://example.test/article/2",
+        canonical_url_hash="d" * 64,
+        summary="Search result snippet",
+    )
+    db_session.add(article)
+    await db_session.commit()
+
+    settings = Settings(ingestion_max_attempts=2, ingestion_base_backoff_seconds=0.01)
+    monkeypatch.setattr(jobs, "get_settings", lambda: settings)
+    session_factory = async_sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False)
+    monkeypatch.setattr(jobs, "SessionFactory", session_factory)
+    monkeypatch.setattr(jobs, "SafeHttpClient", FailingClient)
+    monkeypatch.setattr(jobs, "EmbeddingIndex", SuccessfulEmbeddingIndex)
+
+    with pytest.raises(Retry):
+        await jobs.ingest_discovered_article({"job_try": 1, "tenant_id": user.id}, article.id)
+    await db_session.refresh(article)
+    assert article.status == "failed"
+
+    result = await jobs.ingest_discovered_article({"job_try": 2, "tenant_id": user.id}, article.id)
+    assert result["status"] == "failed"
+    await db_session.refresh(article)
+    assert article.status == "failed"
 
 
 @pytest.mark.asyncio
