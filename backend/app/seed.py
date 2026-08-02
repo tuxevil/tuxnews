@@ -1,12 +1,15 @@
 import asyncio
+from pathlib import Path
 
 from sqlalchemy import select
 
 from app.audit.service import record_audit
 from app.core.config import get_settings
+from app.core.context import ActorContext, TenantContext
 from app.core.security import hash_password
 from app.db.models import User
 from app.db.session import SessionFactory
+from app.ingestion.sources import sync_static_sources
 
 
 async def seed_initial_admin() -> None:
@@ -34,7 +37,18 @@ async def seed_initial_admin() -> None:
                 actor_type="system",
                 actor_id="seed_initial_admin",
             )
-            await session.commit()
+        else:
+            user = existing
+        await sync_static_sources(
+            session,
+            user.id,
+            Path(settings.sources_path),
+            actor=ActorContext(
+                tenant=TenantContext(user.id),
+                actor_type="system",
+                actor_id="seed_static_sources",
+            ),
+        )
 
 
 if __name__ == "__main__":

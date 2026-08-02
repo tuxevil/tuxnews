@@ -2,13 +2,15 @@ import ipaddress
 from pathlib import Path
 
 import pytest
+from app import seed
+from app.core.config import Settings
 from app.core.security import hash_password
 from app.db.models import Source, User
 from app.ingestion import http_client
 from app.ingestion.sources import load_sources, sync_static_sources
 from httpx import AsyncClient
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 
 def test_loader_keeps_valid_entries_and_reports_invalid_entries(tmp_path: Path) -> None:
@@ -85,6 +87,44 @@ sources:
         ("https://example.com/dynamic", "dynamic", True),
         ("https://example.com/one", "static", True),
         ("https://example.com/two", "static", False),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_startup_seed_reconciles_repository_sources(
+    db_engine,
+    db_session: AsyncSession,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "sources.yaml"
+    path.write_text(
+        """
+sources:
+  - name: Seeded source
+    url: https://example.com/seeded
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        seed,
+        "SessionFactory",
+        async_sessionmaker(db_engine, class_=AsyncSession, expire_on_commit=False),
+    )
+    monkeypatch.setattr(
+        seed,
+        "get_settings",
+        lambda: Settings(sources_path=str(path), initial_admin_email="seed-admin@example.com"),
+    )
+
+    await seed.seed_initial_admin()
+    await seed.seed_initial_admin()
+
+    user = await db_session.scalar(select(User).where(User.email == "seed-admin@example.com"))
+    assert user is not None
+    sources = list(await db_session.scalars(select(Source).where(Source.user_id == user.id)))
+    assert [(source.name, source.origin, source.is_active) for source in sources] == [
+        ("Seeded source", "static", True),
     ]
 
 
