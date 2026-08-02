@@ -98,9 +98,9 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install backend
-        run: pip install -e '.[dev]'
+        run: python -m pip install --upgrade pip && pip install -e . pip-audit
       - name: Audit Python dependencies
-        run: pip-audit
+        run: pip-audit --skip-editable
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
