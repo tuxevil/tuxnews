@@ -192,7 +192,7 @@ def test_scripts_parse_without_syntax_errors() -> None:
         assert result.returncode == 0, result.stderr
 
 
-def test_rebuild_qdrant_without_provider_reports_clear_blocker() -> None:
+def test_rebuild_qdrant_without_embedding_dependency_reports_clear_blocker() -> None:
     import asyncio
     import importlib.util
 
@@ -202,5 +202,8 @@ def test_rebuild_qdrant_without_provider_reports_clear_blocker() -> None:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
 
-    with pytest.raises(RuntimeError, match="no embedding provider configured"):
-        asyncio.run(module._default_provider("sentence-transformers/test"))
+    from app.core.config import Settings
+    from app.embeddings.provider import EmbeddingUnavailable, SentenceTransformerProvider
+
+    with pytest.raises(EmbeddingUnavailable, match="sentence-transformers is not installed"):
+        asyncio.run(SentenceTransformerProvider(Settings(embedding_model="sentence-transformers/test")).ensure_available())

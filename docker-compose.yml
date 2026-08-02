@@ -10,6 +10,10 @@ services:
       TUXNEWS_REDIS_URL: ${TUXNEWS_REDIS_URL:-redis://redis:6379/0}
       TUXNEWS_QDRANT_URL: ${TUXNEWS_QDRANT_URL:-http://qdrant:6333}
       TUXNEWS_ARCHIVE_ROOT: /news-archive
+      TUXNEWS_INGESTION_POLL_INTERVAL_SECONDS: ${TUXNEWS_INGESTION_POLL_INTERVAL_SECONDS:-900}
+      TUXNEWS_EMBEDDING_MODEL: ${TUXNEWS_EMBEDDING_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
+      TUXNEWS_EMBEDDING_VERSION: ${TUXNEWS_EMBEDDING_VERSION:-v1}
+      TUXNEWS_EMBEDDING_DIMENSION: ${TUXNEWS_EMBEDDING_DIMENSION:-384}
       TUXNEWS_OBSERVABILITY_HASH_SALT: ${TUXNEWS_OBSERVABILITY_HASH_SALT:-local-only-change-me-observability-salt}
       TUXNEWS_HEALTH_CHECK_TIMEOUT_SECONDS: ${TUXNEWS_HEALTH_CHECK_TIMEOUT_SECONDS:-2}
       TUXNEWS_QUOTA_POLICY_VERSION: ${TUXNEWS_QUOTA_POLICY_VERSION:-quota-v1}
@@ -38,6 +42,7 @@ services:
       TUXNEWS_REFRESH_TOKEN_PREVIOUS_VALID_UNTIL: ${TUXNEWS_REFRESH_TOKEN_PREVIOUS_VALID_UNTIL:-}
     volumes:
       - archive_data:/news-archive
+      - embedding_cache:/root/.cache
     ports:
       - "${TUXNEWS_API_PORT:-8000}:8000"
     depends_on:
@@ -60,6 +65,10 @@ services:
       TUXNEWS_REDIS_URL: ${TUXNEWS_REDIS_URL:-redis://redis:6379/0}
       TUXNEWS_QDRANT_URL: ${TUXNEWS_QDRANT_URL:-http://qdrant:6333}
       TUXNEWS_ARCHIVE_ROOT: /news-archive
+      TUXNEWS_INGESTION_POLL_INTERVAL_SECONDS: ${TUXNEWS_INGESTION_POLL_INTERVAL_SECONDS:-900}
+      TUXNEWS_EMBEDDING_MODEL: ${TUXNEWS_EMBEDDING_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
+      TUXNEWS_EMBEDDING_VERSION: ${TUXNEWS_EMBEDDING_VERSION:-v1}
+      TUXNEWS_EMBEDDING_DIMENSION: ${TUXNEWS_EMBEDDING_DIMENSION:-384}
       TUXNEWS_OBSERVABILITY_HASH_SALT: ${TUXNEWS_OBSERVABILITY_HASH_SALT:-local-only-change-me-observability-salt}
       TUXNEWS_HEALTH_CHECK_TIMEOUT_SECONDS: ${TUXNEWS_HEALTH_CHECK_TIMEOUT_SECONDS:-2}
       TUXNEWS_QUOTA_POLICY_VERSION: ${TUXNEWS_QUOTA_POLICY_VERSION:-quota-v1}
@@ -88,6 +97,8 @@ services:
       TUXNEWS_REFRESH_TOKEN_PREVIOUS_VALID_UNTIL: ${TUXNEWS_REFRESH_TOKEN_PREVIOUS_VALID_UNTIL:-}
     volumes:
       - archive_data:/news-archive
+      - embedding_cache:/root/.cache
+      - ./scripts:/scripts:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -178,6 +189,7 @@ volumes:
   archive_data:
   ollama_data:
   backup_data:
+  embedding_cache:
 
 networks:
   private:

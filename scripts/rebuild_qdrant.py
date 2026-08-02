@@ -22,48 +22,52 @@ from app.core.config import get_settings
 from app.core.context import TenantContext
 from app.db.models import Article
 from app.db.session import SessionFactory
+from app.embeddings.provider import SentenceTransformerProvider
 from app.embeddings.qdrant_index import EmbeddingIndex
 
-EmbeddingProvider = Callable[[str], Awaitable[list[float]]]
-
-
-async def _default_provider(model: str) -> list[float]:
-    raise RuntimeError(
-        f"no embedding provider configured for model {model!r}; "
-        "set one via the rebuild entrypoint or restore the Qdrant snapshot"
-    )
+EmbeddingFunction = Callable[[str], Awaitable[list[float]]]
 
 
 async def rebuild(
-    provider: EmbeddingProvider | None = None,
+    provider: EmbeddingFunction | None = None,
     *,
     limit: int | None = None,
+    settings=None,
 ) -> dict[str, Any]:
-    settings = get_settings()
-    active_provider = provider or _default_provider
+    settings = settings or get_settings()
+    local_provider = None if provider is not None else SentenceTransformerProvider(settings)
+    if local_provider is not None:
+        await local_provider.ensure_available()
+    active_provider = provider or local_provider.embed
     index = EmbeddingIndex(settings)
     scanned = 0
     embedded = 0
     skipped = 0
-    async with SessionFactory() as session:
-        query = select(Article).where(Article.status == "published").order_by(Article.id)
-        if limit is not None:
-            query = query.limit(limit)
-        articles = list(await session.scalars(query))
-        for article in articles:
-            scanned += 1
-            try:
-                vector = await active_provider(article.content_clean or article.summary or "")
-            except Exception:
-                skipped += 1
-                continue
-            await index.upsert(
-                tenant=TenantContext(article.user_id),
-                article_id=article.id,
-                vector=vector,
-                canonical_url_hash=article.canonical_url_hash,
-            )
-            embedded += 1
+    try:
+        async with SessionFactory() as session:
+            query = select(Article).where(Article.status == "published").order_by(Article.id)
+            if limit is not None:
+                query = query.limit(limit)
+            articles = list(await session.scalars(query))
+            for article in articles:
+                scanned += 1
+                try:
+                    vector = await active_provider(article.content_clean or article.summary or "")
+                except Exception:
+                    skipped += 1
+                    continue
+                await index.upsert(
+                    tenant=TenantContext(article.user_id),
+                    article_id=article.id,
+                    vector=vector,
+                    canonical_url_hash=article.canonical_url_hash,
+                )
+                article.embedding_model = settings.embedding_model
+                article.embedding_version = settings.embedding_version
+                embedded += 1
+            await session.commit()
+    finally:
+        await index.aclose()
     return {
         "collection": index.collection,
         "articles_scanned": scanned,
@@ -74,10 +78,14 @@ async def rebuild(
 
 async def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--model", default=None)
     parser.add_argument("--limit", type=int, default=None)
     args = parser.parse_args()
     try:
-        result = await rebuild(limit=args.limit)
+        settings = get_settings()
+        if args.model:
+            settings = settings.model_copy(update={"embedding_model": args.model})
+        result = await rebuild(limit=args.limit, settings=settings)
     except RuntimeError as exc:
         print(f"rebuild blocked: {exc}", file=sys.stderr)
         return 2

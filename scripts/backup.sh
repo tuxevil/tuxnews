@@ -35,7 +35,7 @@ if command -v curl >/dev/null 2>&1; then
   download() { curl -fsS "$1" -o "$2"; }
 else
   get_json() { wget -qO- "$1"; }
-  post_json() { wget -qO- --post-data= "" "$1"; }
+  post_json() { wget -qO- --post-data="" "$1"; }
   download() { wget -q -O "$2" "$1"; }
 fi
 collections="$(get_json "$TUXNEWS_QDRANT_URL/collections" | sed -n 's/.*"name":"\([^"]*\)".*/\1/p')"

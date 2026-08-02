@@ -36,6 +36,7 @@ dependencies = [
 
 [project.optional-dependencies]
 ai = ["litellm>=1.52,<2"]
+embeddings = ["sentence-transformers>=3,<4"]
 dev = [
   "aiosqlite>=0.20,<1",
   "mypy>=1.13,<2",

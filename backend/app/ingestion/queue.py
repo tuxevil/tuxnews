@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from arq import create_pool
 from arq.connections import RedisSettings
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +16,7 @@ async def enqueue_source_ingestion(
     *,
     source: Source,
     actor: ActorContext,
+    pool: Any | None = None,
 ) -> int:
     """Create an ingestion run for a source and enqueue the ARQ job."""
 
@@ -25,9 +28,12 @@ async def enqueue_source_ingestion(
     session.add(run)
     await session.flush()
     settings = get_settings()
-    pool = await create_pool(RedisSettings.from_dsn(settings.redis_url))
+    active_pool = pool
+    owned_pool = active_pool is None
+    if active_pool is None:
+        active_pool = await create_pool(RedisSettings.from_dsn(settings.redis_url))
     try:
-        await pool.enqueue_job(
+        await active_pool.enqueue_job(
             "ingest_source",
             run.id,
             {
@@ -38,5 +44,6 @@ async def enqueue_source_ingestion(
             },
         )
     finally:
-        await pool.aclose()
+        if owned_pool:
+            await active_pool.aclose()
     return run.id

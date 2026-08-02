@@ -14,3 +14,8 @@ Pydantic schema. Invalid, unavailable, or fallback responses produce a valid
 extractive edition and retain the provider error in `error_message` for
 recovery/observability. REST exposes history, the local-time `today` view,
 generation, and explicit regeneration.
+
+The worker dispatcher checks active schedules once per minute, converts UTC to
+the configured timezone, and enqueues the matching local minute with a
+deterministic ARQ job id. The persisted briefing slot remains the idempotency
+boundary.

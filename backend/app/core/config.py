@@ -74,6 +74,7 @@ class Settings(BaseSettings):
     ingestion_max_attempts: int = 5
     ingestion_base_backoff_seconds: float = 5.0
     ingestion_max_backoff_seconds: float = 300.0
+    ingestion_poll_interval_seconds: int = 900
     llm_default_profile: Literal["eco", "cloud", "hybrid"] = "eco"
     llm_eco_model: str = "ollama/llama3.2:3b"
     llm_cloud_model: str = "openai/gpt-4o-mini"

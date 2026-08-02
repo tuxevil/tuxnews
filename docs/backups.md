@@ -41,7 +41,7 @@ If a snapshot is missing or the restore upload fails, Qdrant is rebuilt from
 PostgreSQL — it is deliberately not a source of truth:
 
 ```bash
-docker compose exec -T backup python scripts/rebuild_qdrant.py --limit 0
+docker compose exec -T worker python /scripts/rebuild_qdrant.py --limit 0
 ```
 
 `scripts/rebuild_qdrant.py` re-embeds every published article through the

@@ -4,6 +4,10 @@
 discovery. The slot key is part of the database uniqueness boundary, so retrying
 the same user/slot returns the existing run instead of issuing searches again.
 
+The worker dispatcher checks active users once per minute and schedules one UTC
+hour slot per user. The dispatched job carries the scheduler tenant context and
+continues to enforce the worker quota and audit boundaries.
+
 Queries are built only from positive `UserTopic` weights, validated source
 hostnames, and fixed product terms. Topic text is reduced to lowercase
 letters, digits, spaces, `_`, and `-`; article titles and snippets never enter a
